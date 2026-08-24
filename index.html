@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>【70歳以上】訪問診療 医療費上限＆保険証OCRシミュレーター</title>
+  <!-- Tesseract.js (オフライン可能なブラウザ内OCRライブラリ) -->
+  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #f0f4f8; margin: 0; padding: 15px; color: #333; }
+    .card { background: white; border-radius: 12px; padding: 20px; max-width: 520px; margin: 0 auto 15px; box-shadow: 0 2px 8px rgba(0,0,0,0.08); }
+    h1 { font-size: 1.15rem; text-align: center; color: #005a9c; margin-top: 0; }
+    
+    /* OCRエリアのスタイル */
+    .ocr-section { background: #f8fafc; border: 2px dashed #005a9c; border-radius: 8px; padding: 15px; text-align: center; margin-bottom: 20px; }
+    .ocr-btn-label { display: inline-block; background: #005a9c; color: white; padding: 10px 20px; border-radius: 6px; font-weight: bold; cursor: pointer; font-size: 0.95rem; }
+    .ocr-btn-label:hover { background: #004070; }
+    #imageInput { display: none; }
+    #previewImg { max-width: 100%; max-height: 200px; margin-top: 10px; border-radius: 6px; display: none; }
+    #ocrStatus { font-size: 0.85rem; color: #555; margin-top: 8px; font-weight: bold; }
+    
+    label { font-weight: bold; display: block; margin-top: 15px; font-size: 0.9rem; color: #444; }
+    select, input[type="number"] { width: 100%; padding: 12px; margin-top: 5px; border: 1px solid #bbb; border-radius: 6px; box-sizing: border-box; font-size: 0.95rem; background: #fff; }
+    
+    .result-box { background: #e8f4fd; border: 2px solid #005a9c; padding: 15px; border-radius: 8px; margin-top: 20px; text-align: center; }
+    .result-price { font-size: 2rem; font-weight: bold; color: #d9383a; margin: 8px 0; }
+    .sub-info { font-size: 0.85rem; color: #555; text-align: left; background: #fff; padding: 10px; border-radius: 6px; margin-top: 10px; border: 1px solid #e0e0e0; }
+    .notice { font-size: 0.78rem; color: #666; margin-top: 12px; line-height: 1.4; }
+    
+    /* 読み取り成功時のハイライト */
+    .detected-badge { background: #4caf50; color: white; padding: 2px 8px; border-radius: 4px; font-size: 0.8rem; vertical-align: middle; }
+  </style>
+</head>
+<body>
+
+<div class="card">
+  <h1>【70歳以上】訪問診療 医療費上限シミュレーター</h1>
+  
+  <!-- 保険証OCR写真アップロードエリア -->
+  <div class="ocr-section">
+    <div style="font-size:0.9rem; font-weight:bold; margin-bottom:8px;">📷 保険証から自動読み取り</div>
+    <label for="imageInput" class="ocr-btn-label">保険証を撮影・ファイル選択</label>
+    <input type="file" id="imageInput" accept="image/*" onchange="processInsuranceCard(event)">
+    <br>
+    <img id="previewImg" alt="保険証プレビュー">
+    <div id="ocrStatus">保険証・高齢受給者証の写真を選ぶと「負担割合」を判別します</div>
+  </div>
+
+  <label>
+    1. 保険証の負担割合・区分
+    <span id="ocrBadge" class="detected-badge" style="display:none;">OCR自動入力</span>
+  </label>
+  <select id="category" onchange="calculate()">
+    <option value="general_2">一般（2割負担：年収約200万〜370万円）</option>
+    <option value="general_1">一般（1割負担：年収約156万〜200万円）</option>
+    <option value="low_2">区分Ⅱ（1割負担：住民税非課税世帯）</option>
+    <option value="low_1">区分Ⅰ（1割負担：老齢年金受給額80万円以下など）</option>
+    <option value="high_1">現役並みⅠ（3割負担：課税所得145万円〜）</option>
+    <option value="high_2">現役並みⅡ（3割負担：課税所得380万円〜）</option>
+    <option value="high_3">現役並みⅢ（3割負担：課税所得690万円〜）</option>
+  </select>
+
+  <label>2. 想定される月間の総医療費（10割分・概算）</label>
+  <select id="totalCost" onchange="calculate()">
+    <option value="100000">10万円（月2回の定期訪問診療＋処方）</option>
+    <option value="200000">20万円（訪問診療＋訪問看護＋頻繁な往診）</option>
+    <option value="300000">30万円（高度な在宅医療・処置あり）</option>
+  </select>
+
+  <label>3. 交通費・自費費用など（1ヶ月分合計・任意）</label>
+  <input type="number" id="extraFee" value="0" placeholder="例: 3000" oninput="calculate()">
+
+  <div class="result-box">
+    <div style="font-size:0.9rem; font-weight:bold;">1ヶ月の自己負担上限額（目安）</div>
+    <div class="result-price" id="resultPrice">約 18,000 円</div>
+    <div id="comparisonText" style="font-size: 0.85rem; color: #333;"></div>
+  </div>
+
+  <div class="sub-info" id="detailText"></div>
+
+  <div class="notice">
+    ※OCR解析は端末内で処理されるため、サーバーに画像データが送信・保存されることは一切ありません。<br>
+    ※訪問診療は「外来（個人単位）」の上限枠が適用されます。
+  </div>
+</div>
+
+<script>
+// --- 保険証OCR解析機能 ---
+async function processInsuranceCard(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+
+  const previewImg = document.getElementById('previewImg');
+  const ocrStatus = document.getElementById('ocrStatus');
+  const ocrBadge = document.getElementById('ocrBadge');
+
+  // 画像プレビューの表示
+  previewImg.src = URL.createObjectURL(file);
+  previewImg.style.display = 'inline-block';
+  ocrStatus.style.color = '#005a9c';
+  ocrStatus.textContent = '解析中...（約5〜10秒ほどかかります）';
+
+  try {
+    // Tesseract.jsによる日本語OCRの実行（ブラウザ内で完了）
+    const result = await Tesseract.recognize(
+      file,
+      'jpn',
+      {
+        logger: m => {
+          if (m.status === 'recognizing text') {
+            const progress = Math.round(m.progress * 100);
+            ocrStatus.textContent = `読み取り中... (${progress}%)`;
+          }
+        }
+      }
+    );
+
+    const text = result.data.text;
+    console.log("OCR結果:", text);
+
+    // テキストから負担割合キーワードの正規表現マッチング
+    let detectedCategory = null;
+
+    if (text.includes("3割") || text.includes("３割") || text.includes("割合 3") || text.includes("割合 ３")) {
+      detectedCategory = "high_1"; // デフォルトで現役並みⅠ（3割）を設定
+    } else if (text.includes("2割") || text.includes("２割") || text.includes("割合 2") || text.includes("割合 ２")) {
+      detectedCategory = "general_2"; // 2割負担
+    } else if (text.includes("1割") || text.includes("１割") || text.includes("割合 1") || text.includes("割合 １")) {
+      detectedCategory = "general_1"; // 1割負担
+    } else if (text.includes("区分Ⅱ") || text.includes("区分2") || text.includes("区分 Ⅱ")) {
+      detectedCategory = "low_2"; // 低所得Ⅱ
+    } else if (text.includes("区分Ⅰ") || text.includes("区分1") || text.includes("区分 Ⅰ")) {
+      detectedCategory = "low_1"; // 低所得Ⅰ
+    }
+
+    if (detectedCategory) {
+      document.getElementById('category').value = detectedCategory;
+      ocrStatus.style.color = '#4caf50';
+      ocrStatus.textContent = '解析完了：判定結果を自動選択しました！';
+      ocrBadge.style.display = 'inline-block';
+      calculate();
+    } else {
+      ocrStatus.style.color = '#d9383a';
+      ocrStatus.textContent = '割合の特定ができませんでした。手動でプルダウンから選択してください。';
+      ocrBadge.style.display = 'none';
+    }
+
+  } catch (error) {
+    console.error("OCRエラー:", error);
+    ocrStatus.style.color = '#d9383a';
+    ocrStatus.textContent = '読み取りに失敗しました。明るい場所で撮り直すか手動選択してください。';
+  }
+}
+
+// --- 限度額計算ロジック ---
+function calculate() {
+  const cat = document.getElementById('category').value;
+  const cost = Number(document.getElementById('totalCost').value);
+  const extra = Number(document.getElementById('extraFee').value) || 0;
+  
+  let cap = 0;
+  let rate = 0.1;
+  let isPersonalCap = true;
+
+  if (cat === 'general_2') {
+    rate = 0.2;
+    cap = 18000;
+  } else if (cat === 'general_1') {
+    rate = 0.1;
+    cap = 18000;
+  } else if (cat === 'low_2') {
+    rate = 0.1;
+    cap = 8000;
+  } else if (cat === 'low_1') {
+    rate = 0.1;
+    cap = 8000;
+  } else if (cat === 'high_1') {
+    rate = 0.3;
+    cap = 80100 + Math.max(0, cost - 267000) * 0.01;
+    isPersonalCap = false;
+  } else if (cat === 'high_2') {
+    rate = 0.3;
+    cap = 167400 + Math.max(0, cost - 558000) * 0.01;
+    isPersonalCap = false;
+  } else if (cat === 'high_3') {
+    rate = 0.3;
+    cap = 252600 + Math.max(0, cost - 842000) * 0.01;
+    isPersonalCap = false;
+  }
+
+  const normalCost = cost * rate;
+  const actualPay = Math.min(normalCost, cap);
+  const totalPayWithExtra = actualPay + extra;
+  const saved = Math.max(0, normalCost - actualPay);
+
+  document.getElementById('resultPrice').textContent = "約 " + Math.round(totalPayWithExtra).toLocaleString() + " 円";
+  
+  let compText = "本来の医療費負担（" + (rate * 10) + "割: " + Math.round(normalCost).toLocaleString() + "円）";
+  if (extra > 0) {
+    compText += " ＋ 交通費等 " + extra.toLocaleString() + "円";
+  }
+  if (saved > 0) {
+    compText += "<br><strong style='color:#d9383a;'>→ 高額療養費で 約 " + Math.round(saved).toLocaleString() + " 円 安くなります</strong>";
+  }
+  document.getElementById('comparisonText').innerHTML = compText;
+
+  let detailHtml = "";
+  if (isPersonalCap) {
+    detailHtml = "<b>【解説】</b>70歳以上の一般・非課税区分は、訪問診療（外来）の個人上限<b>「月額 " + cap.toLocaleString() + " 円」</b>が適用されます。どれだけ診療や往診が増えても、医療費はこの金額でストップします。";
+  } else {
+    detailHtml = "<b>【解説】</b>現役並み所得（3割負担）の方は、総医療費の額に応じた世帯上限が適用されます。";
+  }
+  document.getElementById('detailText').innerHTML = detailHtml;
+}
+
+// 初期計算
+calculate();
+</script>
+
+</body>
+</html>
