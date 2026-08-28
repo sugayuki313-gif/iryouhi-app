@@ -77,6 +77,7 @@ label {
 select,
 input[type="number"],
 input[type="text"],
+input[type="date"],
 input[type="month"] {
   width: 100%;
   padding: 14px;
@@ -271,20 +272,17 @@ hr {
 <div class="card hidden" id="ocrCard">
   <div class="step">② 読み取った情報を確認</div>
   <div class="help">
-    OCRは間違えることがあります。必ず保険資格情報を見ながら確認してください。
+    OCRは間違えることがあります。生年月日と区分をご確認ください。
   </div>
 
   <div class="ocr-result">
-    <label>年齢</label>
-    <input id="ocrAge" type="number" min="0" max="120" placeholder="例：78">
+    <label for="ocrBirthdate">生年月日</label>
+    <input id="ocrBirthdate" type="date" onchange="onBirthdateChange()">
 
-    <label>保険者番号</label>
-    <input id="ocrInsurer" type="text" inputmode="numeric" placeholder="例：39472139">
+    <label for="ocrAge">年齢（自動計算）</label>
+    <input id="ocrAge" type="number" readonly placeholder="生年月日を入力すると表示されます" style="background:#eee;">
 
-    <label>記号 / 被保険者番号</label>
-    <input id="ocrNumber" type="text" placeholder="例：12345678">
-
-    <label>所得区分・限度区分</label>
+    <label for="ocrCategory">所得区分・限度区分</label>
     <select id="ocrCategory">
       <option value="">わからない</option>
       <option value="high">高所得・現役並み</option>
@@ -432,7 +430,7 @@ document.getElementById("imageInput").addEventListener("change", async function(
 
 
 /* =========================================================
-   2. 画像前処理（コントラスト調整＆拡大）
+   2. 画像前処理
 ========================================================= */
 
 function preprocessImage(file) {
@@ -466,14 +464,13 @@ function preprocessImage(file) {
         const imageData = ctx.getImageData(0, 0, width, height);
         const data = imageData.data;
 
-        // グレースケール＆コントラスト調整
         for (let i = 0; i < data.length; i += 4) {
           const r = data[i];
           const g = data[i + 1];
           const b = data[i + 2];
 
           let gray = 0.299 * r + 0.587 * g + 0.114 * b;
-          gray = ((gray - 128) * 1.35) + 128; // コントラスト強調
+          gray = ((gray - 128) * 1.35) + 128;
           gray = Math.max(0, Math.min(255, gray));
 
           data[i] = data[i + 1] = data[i + 2] = gray;
@@ -531,11 +528,10 @@ async function runOCR(canvas) {
 
 
 /* =========================================================
-   4. OCR結果の解析（和暦・各区分・数字対応）
+   4. OCR結果の解析（生年月日・限度区分）
 ========================================================= */
 
 function parseOCRResult(text) {
-  // 全角英数・和数字・特殊記号の正規化
   let normalized = text
     .replace(/[０-９]/g, s => String.fromCharCode(s.charCodeAt(0) - 0xfee0))
     .replace(/[Ａ-Ｚａ-ｚ]/g, s => String.fromCharCode(s.charCodeAt(0) - 0xfee0))
@@ -551,7 +547,7 @@ function parseOCRResult(text) {
     .replace(/[八]/g, "8")
     .replace(/[九]/g, "9");
 
-  /* --- A. 生年月日と年齢の算出 --- */
+  /* --- A. 生年月日の抽出と日付フォーマットの整形 --- */
   const birthMatch = normalized.match(/(?:生年月日|生年|出生)[^\d]*(明治|大正|昭和|平成|令和|\d{4})[^\d]*(\d{1,2})[^\d]+(\d{1,2})[^\d]+(\d{1,2})?/);
 
   if (birthMatch) {
@@ -567,58 +563,54 @@ function parseOCRResult(text) {
     else if (era === "大正") year += 1911;
 
     if (year > 1900 && month >= 1 && month <= 12 && day >= 1 && day <= 31) {
-      const age = calculateAge(year, month, day);
-      if (age >= 0 && age <= 120) {
-        document.getElementById("ocrAge").value = age;
-      }
+      const formattedMonth = String(month).padStart(2, '0');
+      const formattedDay = String(day).padStart(2, '0');
+      const isoDate = `${year}-${formattedMonth}-${formattedDay}`;
+
+      document.getElementById("ocrBirthdate").value = isoDate;
+      onBirthdateChange(); // 年齢を自動計算
     }
   }
 
-  /* --- B. 保険者番号（8桁） --- */
-  const insurerMatch = normalized.match(/(?:保険者番号|保険者)[^\d\n]*[:：]?\s*(\d{6,8})/);
-  if (insurerMatch) {
-    document.getElementById("ocrInsurer").value = insurerMatch[1];
-  } else {
-    // 39から始まる8桁等の数値を自動補完
-    const standalone = normalized.match(/\b(39\d{6}|\d{8})\b/);
-    if (standalone) {
-      document.getElementById("ocrInsurer").value = standalone[0];
-    }
-  }
-
-  /* --- C. 被保険者番号（8桁） --- */
-  const numberMatch = normalized.match(/(?:被保険者番号|番号)[^\d\n]*[:：]?\s*(\d{6,8})/);
-  if (numberMatch) {
-    document.getElementById("ocrNumber").value = numberMatch[1];
-  }
-
-  /* --- D. 所得区分・限度区分 --- */
+  /* --- B. 所得区分・限度区分 --- */
   if (/区分\s*[:：]?\s*[アA]|現役並み/.test(normalized)) {
     document.getElementById("ocrCategory").value = "high";
   } else if (/区分\s*[:：]?\s*[イBウC]/.test(normalized)) {
     document.getElementById("ocrCategory").value = "middle";
   } else if (/区分\s*[:：]?\s*[エE]|区\s*[ⅡII2]/.test(normalized)) {
-    // 「区Ⅱ」は低所得区分
     document.getElementById("ocrCategory").value = "low";
   } else if (/区分\s*[:：]?\s*[オO]|区\s*[ⅠI1]/.test(normalized)) {
-    // 「区Ⅰ」は非課税区分
     document.getElementById("ocrCategory").value = "nonTax";
   }
 }
 
 
 /* =========================================================
-   5. 年齢算出関数
+   5. 生年月日から年齢を自動計算する処理
 ========================================================= */
 
-function calculateAge(year, month, day) {
+function onBirthdateChange() {
+  const birthdateVal = document.getElementById("ocrBirthdate").value;
+  if (!birthdateVal) {
+    document.getElementById("ocrAge").value = "";
+    return;
+  }
+
+  const birthDate = new Date(birthdateVal);
   const today = new Date();
-  let age = today.getFullYear() - year;
-  const birthday = new Date(today.getFullYear(), month - 1, day);
-  if (birthday > today) {
+
+  let age = today.getFullYear() - birthDate.getFullYear();
+  const m = today.getMonth() - birthDate.getMonth();
+
+  if (m < 0 || (m === 0 && today.getDate() < birthDate.getDate())) {
     age--;
   }
-  return age;
+
+  if (age >= 0 && age <= 120) {
+    document.getElementById("ocrAge").value = age;
+  } else {
+    document.getElementById("ocrAge").value = "";
+  }
 }
 
 
@@ -629,12 +621,12 @@ function calculateAge(year, month, day) {
 function confirmOCR() {
   const age = Number(document.getElementById("ocrAge").value);
 
-  if (!age || age < 0 || age > 120) {
-    alert("年齢を正しく確認・入力してください。");
+  if (!document.getElementById("ocrBirthdate").value || isNaN(age)) {
+    alert("生年月日を正しく入力・確認してください。");
     return;
   }
 
-  // 年齢区分の自動連動
+  // 年齢区分の自動設定
   if (age < 70) {
     document.getElementById("age").value = "under70";
   } else if (age < 75) {
@@ -651,7 +643,7 @@ function confirmOCR() {
     document.getElementById("category").value = category;
   }
 
-  alert("読み取った情報を計算フォームに反映しました。\n計算前に条件をご確認ください。");
+  alert(`生年月日より年齢（${age}歳）を判定し、計算フォームへ反映しました。`);
 }
 
 
