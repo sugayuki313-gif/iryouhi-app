@@ -509,7 +509,7 @@ async function runOCR(canvas) {
 
 
 /* =========================================================
-   4. OCR結果の解析・直接フォーム書き込み
+   4. OCR結果の解析・直接フォーム書き込み (和暦対応強化)
 ========================================================= */
 
 function parseOCRResult(text) {
@@ -518,6 +518,7 @@ function parseOCRResult(text) {
     .replace(/[Ａ-Ｚａ-ｚ]/g, s => String.fromCharCode(s.charCodeAt(0) - 0xfee0))
     .replace(/[ＯＯ〇]/g, "0")
     .replace(/[Ｉl|I]/g, "1")
+    .replace(/[元]/g, "1")
     .replace(/[一]/g, "1")
     .replace(/[二]/g, "2")
     .replace(/[三]/g, "3")
@@ -530,30 +531,46 @@ function parseOCRResult(text) {
 
   let detectedItems = [];
 
-  /* --- A. 生年月日の抽出・反映 --- */
-  const birthMatch = normalized.match(/(?:生年月日|生年|出生)[^\d]*(明治|大正|昭和|平成|令和|\d{4})[^\d]*(\d{1,2})[^\d]+(\d{1,2})[^\d]+(\d{1,2})?/);
+  /* --- A. 和暦・西暦双方に対応した生年月日抽出 --- */
+  // 1. 和暦パターン（明治/大正/昭和/平成/令和、略称 M/T/S/H/R、昭/平/令など）
+  const warekiRegex = /(明治|大正|昭和|平成|令和|昭|平|令|[MTSHR])\s*(\d{1,2})\s*年?\s*(\d{1,2})\s*月?\s*(\d{1,2})\s*日?/;
+  
+  // 2. 西暦パターン（例：1980年5月12日、2005.01.20など）
+  const seirekiRegex = /(19\d{2}|20\d{2})\s*年?\s*(\d{1,2})\s*月?\s*(\d{1,2})\s*日?/;
+
+  let birthMatch = normalized.match(warekiRegex);
+  let year = null, month = null, day = null;
 
   if (birthMatch) {
-    let era = birthMatch[1];
-    let year = Number(birthMatch[2] || birthMatch[1]);
-    let month = Number(birthMatch[3] || birthMatch[2]);
-    let day = Number(birthMatch[4] || birthMatch[3]);
+    const eraStr = birthMatch[1];
+    let eraYear = Number(birthMatch[2]);
+    month = Number(birthMatch[3]);
+    day = Number(birthMatch[4]);
 
-    if (era === "昭和") year += 1925;
-    else if (era === "平成") year += 1988;
-    else if (era === "令和") year += 2018;
-    else if (era === "明治") year += 1867;
-    else if (era === "大正") year += 1911;
-
-    if (year > 1900 && month >= 1 && month <= 12 && day >= 1 && day <= 31) {
-      const formattedMonth = String(month).padStart(2, '0');
-      const formattedDay = String(day).padStart(2, '0');
-      const isoDate = `${year}-${formattedMonth}-${formattedDay}`;
-
-      document.getElementById("birthdate").value = isoDate;
-      onBirthdateChange(); // 年齢および年齢区分を直接自動セット
-      detectedItems.push("生年月日");
+    if (/^(昭和|昭|S)$/i.test(eraStr)) year = 1925 + eraYear;
+    else if (/^(平成|平|H)$/i.test(eraStr)) year = 1988 + eraYear;
+    else if (/^(令和|令|R)$/i.test(eraStr)) year = 2018 + eraYear;
+    else if (/^(大正|T)$/i.test(eraStr)) year = 1911 + eraYear;
+    else if (/^(明治|M)$/i.test(eraStr)) year = 1867 + eraYear;
+  } else {
+    // 和暦にヒットしなければ西暦で判定
+    birthMatch = normalized.match(seirekiRegex);
+    if (birthMatch) {
+      year = Number(birthMatch[1]);
+      month = Number(birthMatch[2]);
+      day = Number(birthMatch[3]);
     }
+  }
+
+  // 抽出値のバリデーションと反映
+  if (year && month && day && year > 1890 && month >= 1 && month <= 12 && day >= 1 && day <= 31) {
+    const formattedMonth = String(month).padStart(2, '0');
+    const formattedDay = String(day).padStart(2, '0');
+    const isoDate = `${year}-${formattedMonth}-${formattedDay}`;
+
+    document.getElementById("birthdate").value = isoDate;
+    onBirthdateChange(); // 年齢および年齢区分を即時反映
+    detectedItems.push("生年月日");
   }
 
   /* --- B. 所得区分・限度区分の抽出・反映 --- */
@@ -579,7 +596,7 @@ function parseOCRResult(text) {
     notice.innerHTML = `✓ 画像から <strong>${detectedItems.join("・")}</strong> を読み取って入力フォームへ自動反映しました。誤りがないかご確認ください。`;
     notice.style.display = "block";
   } else {
-    notice.innerHTML = "⚠️ 画像から情報を自動読み取りできませんでした。手入力でご設定ください。";
+    notice.innerHTML = "⚠️ 画像から生年月日や区分を自動読み取りできませんでした。手入力でご設定ください。";
     notice.style.display = "block";
   }
 }
