@@ -145,6 +145,18 @@ button {
   margin-top: 12px;
   font-size: .9rem;
   color: #555;
+  font-weight: bold;
+}
+
+.ocr-notice {
+  background: #e3f2fd;
+  border: 1px solid #90caf9;
+  border-radius: 8px;
+  padding: 12px;
+  margin-top: 15px;
+  font-size: .9rem;
+  color: #0d47a1;
+  display: none;
 }
 
 .result {
@@ -173,17 +185,6 @@ button {
   font-size: 1.05rem;
   font-weight: bold;
   text-align: center;
-}
-
-.ocr-result {
-  background: #f7f7f7;
-  border-radius: 10px;
-  padding: 12px;
-  margin-top: 15px;
-}
-
-.ocr-result input, .ocr-result select {
-  margin-bottom: 10px;
 }
 
 .small {
@@ -228,17 +229,16 @@ hr {
   <div class="privacy">
     <strong>🔒 個人情報について</strong><br>
     このページでは、撮影した画像を自社サーバーへ送信する処理を行いません。
-    OCRは原則としてこの端末のブラウザ内で実行します。<br><br>
-    読み取り結果は自動確定せず、必ずご本人に確認していただきます。
+    OCRは原則としてこの端末のブラウザ内で実行します。
   </div>
 </div>
 
 
-<!-- STEP 1 -->
+<!-- STEP 1: 画像読み取り -->
 <div class="card">
-  <div class="step">① 保険資格情報を撮影</div>
+  <div class="step">① 保険資格情報を撮影（任意）</div>
   <div class="help">
-    保険証・資格確認書などの写真を選択してください。
+    保険証・資格確認書などの写真を撮影すると、フォームへ自動入力されます。
   </div>
 
   <div class="ocr-area">
@@ -264,64 +264,43 @@ hr {
 
     <img id="preview" alt="撮影画像">
     <div id="ocrProgress" class="progress"></div>
+    <div id="ocrNotice" class="ocr-notice"></div>
   </div>
 </div>
 
 
-<!-- OCR RESULT -->
-<div class="card hidden" id="ocrCard">
-  <div class="step">② 読み取った情報を確認</div>
-  <div class="help">
-    OCRは間違えることがあります。生年月日と区分をご確認ください。
-  </div>
-
-  <div class="ocr-result">
-    <label for="ocrBirthdate">生年月日</label>
-    <input id="ocrBirthdate" type="date" onchange="onBirthdateChange()">
-
-    <label for="ocrAge">年齢（自動計算）</label>
-    <input id="ocrAge" type="number" readonly placeholder="生年月日を入力すると表示されます" style="background:#eee;">
-
-    <label for="ocrCategory">所得区分・限度区分</label>
-    <select id="ocrCategory">
-      <option value="">わからない</option>
-      <option value="high">高所得・現役並み</option>
-      <option value="middle">一般的な所得</option>
-      <option value="low">低所得（区分Ⅱ）</option>
-      <option value="nonTax">住民税非課税（区分Ⅰ）</option>
-    </select>
-  </div>
-
-  <button class="primary" onclick="confirmOCR()">
-    ✓ この内容で計算フォームへ反映する
-  </button>
-</div>
-
-
-<!-- STEP 2 -->
+<!-- STEP 2: 条件入力（一本化したメインフォーム） -->
 <div class="card">
-  <div class="step">③ 医療費について入力</div>
+  <div class="step">② 医療費・患者情報について入力</div>
+
+  <label for="birthdate">生年月日</label>
+  <input id="birthdate" type="date" onchange="onBirthdateChange()">
+
+  <label for="calculatedAge">年齢（自動計算）</label>
+  <input id="calculatedAge" type="text" readonly placeholder="生年月日を選択すると自動計算されます" style="background:#f0f0f0;">
+
+  <label for="ageCategory">年齢区分</label>
+  <select id="ageCategory" onchange="updateAgeUI()">
+    <option value="under70">70歳未満</option>
+    <option value="70to74">70～74歳</option>
+    <option value="over75">75歳以上</option>
+  </select>
+
+  <label for="category">所得区分・限度区分</label>
+  <select id="category">
+    <option value="middle">一般的な所得（年収 約370～770万円 / 1割・2割負担）</option>
+    <option value="high">高所得・現役並み（年収 約770万円以上 / 3割負担）</option>
+    <option value="low">低所得（区分Ⅱ / 住民税非課税世帯等）</option>
+    <option value="nonTax">住民税非課税（区分Ⅰ / 年金収入一定以下等）</option>
+  </select>
+
+  <hr>
 
   <label for="treatmentMonth">診療年月</label>
   <input id="treatmentMonth" type="month" value="2026-08">
   <div class="help">
     高額療養費は診療月によって制度が変わるため、診療年月を選択してください。
   </div>
-
-  <label for="age">年齢区分</label>
-  <select id="age" onchange="updateAgeUI()">
-    <option value="under70">70歳未満</option>
-    <option value="70to74">70～74歳</option>
-    <option value="over75">75歳以上</option>
-  </select>
-
-  <label for="category">所得区分</label>
-  <select id="category">
-    <option value="middle">一般的な所得（年収 約370～770万円 / 1割・2割負担）</option>
-    <option value="high">高所得（年収 約770万円以上 / 現役並み・3割負担）</option>
-    <option value="low">低所得（区分Ⅱ / 住民税非課税世帯等）</option>
-    <option value="nonTax">住民税非課税（区分Ⅰ / 年金収入一定以下等）</option>
-  </select>
 
   <label for="medicalCost">その月の医療費総額（10割）</label>
   <input id="medicalCost" type="number" min="0" step="1000" value="1000000" placeholder="例：1000000">
@@ -413,7 +392,9 @@ document.getElementById("imageInput").addEventListener("change", async function(
   preview.src = imageURL;
   preview.style.display = "block";
 
-  document.getElementById("ocrCard").classList.remove("hidden");
+  const notice = document.getElementById("ocrNotice");
+  notice.style.display = "none";
+
   document.getElementById("ocrProgress").textContent = "画像を最適化処理しています…";
 
   try {
@@ -421,7 +402,7 @@ document.getElementById("imageInput").addEventListener("change", async function(
     await runOCR(processedCanvas);
   } catch (error) {
     console.error(error);
-    document.getElementById("ocrProgress").textContent = "OCRに失敗しました。下部のフォームに直接ご入力ください。";
+    document.getElementById("ocrProgress").textContent = "";
     alert("画像の読み取りに失敗しました。\n明るい場所で撮影し、文字が綺麗に写るように再度お試しください。");
   } finally {
     URL.revokeObjectURL(imageURL);
@@ -523,12 +504,12 @@ async function runOCR(canvas) {
   document.getElementById("debugText").textContent = lastOCRText;
 
   parseOCRResult(lastOCRText);
-  progress.textContent = "読み取り完了。内容をご確認ください。";
+  progress.textContent = "";
 }
 
 
 /* =========================================================
-   4. OCR結果の解析（生年月日・限度区分）
+   4. OCR結果の解析・直接フォーム書き込み
 ========================================================= */
 
 function parseOCRResult(text) {
@@ -547,7 +528,9 @@ function parseOCRResult(text) {
     .replace(/[八]/g, "8")
     .replace(/[九]/g, "9");
 
-  /* --- A. 生年月日の抽出と日付フォーマットの整形 --- */
+  let detectedItems = [];
+
+  /* --- A. 生年月日の抽出・反映 --- */
   const birthMatch = normalized.match(/(?:生年月日|生年|出生)[^\d]*(明治|大正|昭和|平成|令和|\d{4})[^\d]*(\d{1,2})[^\d]+(\d{1,2})[^\d]+(\d{1,2})?/);
 
   if (birthMatch) {
@@ -567,32 +550,49 @@ function parseOCRResult(text) {
       const formattedDay = String(day).padStart(2, '0');
       const isoDate = `${year}-${formattedMonth}-${formattedDay}`;
 
-      document.getElementById("ocrBirthdate").value = isoDate;
-      onBirthdateChange(); // 年齢を自動計算
+      document.getElementById("birthdate").value = isoDate;
+      onBirthdateChange(); // 年齢および年齢区分を直接自動セット
+      detectedItems.push("生年月日");
     }
   }
 
-  /* --- B. 所得区分・限度区分 --- */
+  /* --- B. 所得区分・限度区分の抽出・反映 --- */
+  let matchedCategory = null;
   if (/区分\s*[:：]?\s*[アA]|現役並み/.test(normalized)) {
-    document.getElementById("ocrCategory").value = "high";
+    matchedCategory = "high";
   } else if (/区分\s*[:：]?\s*[イBウC]/.test(normalized)) {
-    document.getElementById("ocrCategory").value = "middle";
+    matchedCategory = "middle";
   } else if (/区分\s*[:：]?\s*[エE]|区\s*[ⅡII2]/.test(normalized)) {
-    document.getElementById("ocrCategory").value = "low";
+    matchedCategory = "low";
   } else if (/区分\s*[:：]?\s*[オO]|区\s*[ⅠI1]/.test(normalized)) {
-    document.getElementById("ocrCategory").value = "nonTax";
+    matchedCategory = "nonTax";
+  }
+
+  if (matchedCategory) {
+    document.getElementById("category").value = matchedCategory;
+    detectedItems.push("所得区分");
+  }
+
+  /* --- 通知表示 --- */
+  const notice = document.getElementById("ocrNotice");
+  if (detectedItems.length > 0) {
+    notice.innerHTML = `✓ 画像から <strong>${detectedItems.join("・")}</strong> を読み取って入力フォームへ自動反映しました。誤りがないかご確認ください。`;
+    notice.style.display = "block";
+  } else {
+    notice.innerHTML = "⚠️ 画像から情報を自動読み取りできませんでした。手入力でご設定ください。";
+    notice.style.display = "block";
   }
 }
 
 
 /* =========================================================
-   5. 生年月日から年齢を自動計算する処理
+   5. 生年月日から年齢・年齢区分を自動計算する処理
 ========================================================= */
 
 function onBirthdateChange() {
-  const birthdateVal = document.getElementById("ocrBirthdate").value;
+  const birthdateVal = document.getElementById("birthdate").value;
   if (!birthdateVal) {
-    document.getElementById("ocrAge").value = "";
+    document.getElementById("calculatedAge").value = "";
     return;
   }
 
@@ -607,55 +607,32 @@ function onBirthdateChange() {
   }
 
   if (age >= 0 && age <= 120) {
-    document.getElementById("ocrAge").value = age;
+    document.getElementById("calculatedAge").value = `${age} 歳`;
+
+    // 年齢区分の自動判定
+    if (age < 70) {
+      document.getElementById("ageCategory").value = "under70";
+    } else if (age < 75) {
+      document.getElementById("ageCategory").value = "70to74";
+    } else {
+      document.getElementById("ageCategory").value = "over75";
+    }
+    updateAgeUI();
   } else {
-    document.getElementById("ocrAge").value = "";
+    document.getElementById("calculatedAge").value = "";
   }
 }
 
 
 /* =========================================================
-   6. OCR確認・計算フォームへの転記
-========================================================= */
-
-function confirmOCR() {
-  const age = Number(document.getElementById("ocrAge").value);
-
-  if (!document.getElementById("ocrBirthdate").value || isNaN(age)) {
-    alert("生年月日を正しく入力・確認してください。");
-    return;
-  }
-
-  // 年齢区分の自動設定
-  if (age < 70) {
-    document.getElementById("age").value = "under70";
-  } else if (age < 75) {
-    document.getElementById("age").value = "70to74";
-  } else {
-    document.getElementById("age").value = "over75";
-  }
-
-  updateAgeUI();
-
-  // 所得区分の反映
-  const category = document.getElementById("ocrCategory").value;
-  if (category) {
-    document.getElementById("category").value = category;
-  }
-
-  alert(`生年月日より年齢（${age}歳）を判定し、計算フォームへ反映しました。`);
-}
-
-
-/* =========================================================
-   7. 年齢UIの連動切り替え
+   6. 年齢UIの連動切り替え
 ========================================================= */
 
 function updateAgeUI() {
-  const age = document.getElementById("age").value;
+  const ageCategory = document.getElementById("ageCategory").value;
   const type = document.getElementById("treatmentType");
 
-  if (age === "under70") {
+  if (ageCategory === "under70") {
     type.disabled = true;
   } else {
     type.disabled = false;
@@ -664,11 +641,11 @@ function updateAgeUI() {
 
 
 /* =========================================================
-   8. 高額療養費計算（2026年8月改定対応）
+   7. 高額療養費計算（2026年8月改定対応）
 ========================================================= */
 
 function calculate() {
-  const age = document.getElementById("age").value;
+  const ageCategory = document.getElementById("ageCategory").value;
   const category = document.getElementById("category").value;
   const cost = Number(document.getElementById("medicalCost").value);
   const month = document.getElementById("treatmentMonth").value;
@@ -691,7 +668,7 @@ function calculate() {
   let explanation = "";
 
   /* --- 70歳未満 --- */
-  if (age === "under70") {
+  if (ageCategory === "under70") {
     if (category === "high") {
       cap = 179100 + Math.max(0, cost - 597000) * 0.01;
       multipleCap = 93000;
@@ -767,10 +744,10 @@ function calculate() {
   }
 
   // 本来の窓口負担（割合）
-  let burdenRate = age === "under70" ? 0.30 : 0.20;
-  if (age !== "under70" && category === "high") {
+  let burdenRate = ageCategory === "under70" ? 0.30 : 0.20;
+  if (ageCategory !== "under70" && category === "high") {
     burdenRate = 0.30;
-  } else if (age !== "under70" && (category === "low" || category === "nonTax")) {
+  } else if (ageCategory !== "under70" && (category === "low" || category === "nonTax")) {
     burdenRate = 0.10;
   }
 
@@ -801,7 +778,7 @@ function calculate() {
 
 
 /* =========================================================
-   9. デバッグ・初期化
+   8. デバッグ・初期化
 ========================================================= */
 
 function toggleDebug() {
