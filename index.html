@@ -242,24 +242,35 @@ hr {
   </div>
 
   <div class="ocr-area">
+    <!-- カメラ起動用 input (captureあり) -->
     <input
-      id="imageInput"
+      id="cameraInput"
       type="file"
       accept="image/*"
       capture="environment"
       class="hidden"
     >
 
+    <!-- ファイル・アルバム選択用 input (captureなし) -->
+    <input
+      id="fileInput"
+      type="file"
+      accept="image/*"
+      class="hidden"
+    >
+
+    <!-- カメラ起動ボタン -->
     <button
       class="primary"
-      onclick="document.getElementById('imageInput').click()">
+      onclick="document.getElementById('cameraInput').click()">
       📷 保険資格情報を撮影する
     </button>
 
+    <!-- アルバム選択ボタン -->
     <button
       class="secondary"
-      onclick="document.getElementById('imageInput').click()">
-      画像ファイルを選ぶ
+      onclick="document.getElementById('fileInput').click()">
+      🖼️ 画像ファイルを選ぶ
     </button>
 
     <img id="preview" alt="撮影画像">
@@ -355,7 +366,7 @@ hr {
 
 <div class="card small">
   <strong>制度情報</strong><br>
-  このツールは、厚生労働省の最新ガイドライン（平成30年8月改定・2026年8月現在現行制度）に基づいて計算しています。
+  このツールは、厚生労働省の最新ガイドライン（平成30年8月改定・現行制度）に基づいて計算しています。
 </div>
 
 </div>
@@ -386,11 +397,10 @@ const CATEGORY_OPTIONS = {
 };
 
 /* =========================================================
-   1. 画像選択・実行フロー
+   1. 画像選択・実行フロー（カメラ・ファイル選択を分離）
 ========================================================= */
 
-document.getElementById("imageInput").addEventListener("change", async function(event) {
-  const file = event.target.files[0];
+async function handleImageFile(file) {
   if (!file) return;
 
   if (!file.type.startsWith("image/")) {
@@ -423,6 +433,16 @@ document.getElementById("imageInput").addEventListener("change", async function(
   } finally {
     URL.revokeObjectURL(imageURL);
   }
+}
+
+document.getElementById("cameraInput").addEventListener("change", function(e) {
+  handleImageFile(e.target.files[0]);
+  e.target.value = "";
+});
+
+document.getElementById("fileInput").addEventListener("change", function(e) {
+  handleImageFile(e.target.files[0]);
+  e.target.value = "";
 });
 
 
@@ -666,7 +686,6 @@ function updateAgeUI() {
 
   const currentCategoryValue = categorySelect.value;
 
-  // 70歳未満/70歳以上の区分切り替え
   const groupKey = (ageCategory === "under70") ? "under70" : "over70";
   categorySelect.innerHTML = "";
 
@@ -677,7 +696,6 @@ function updateAgeUI() {
     categorySelect.appendChild(option);
   });
 
-  // 直前選択値のリセット防止試行
   if (categorySelect.querySelector(`option[value="${currentCategoryValue}"]`)) {
     categorySelect.value = currentCategoryValue;
   }
@@ -693,7 +711,7 @@ function updateAgeUI() {
 
 
 /* =========================================================
-   7. 高額療養費計算（厚生労働省ガイドライン・現行基準対応）
+   7. 高額療養費計算（厚生労働省ガイドライン基準）
 ========================================================= */
 
 function calculate() {
@@ -749,7 +767,7 @@ function calculate() {
         break;
     }
   } 
-  /* --- 70歳以上（70～74歳 / 75歳以上） --- */
+  /* --- 70歳以上 --- */
   else {
     switch (category) {
       case "top": // 現役並みⅢ
@@ -778,7 +796,7 @@ function calculate() {
           explanation = "70歳以上・一般所得（世帯上限）";
         }
         break;
-      case "low_ii": // 低所得Ⅱ（非課税世帯）
+      case "low_ii": // 低所得Ⅱ
         if (treatmentType === "outpatient") {
           cap = 8000;
           explanation = "70歳以上・低所得Ⅱ（外来個人単位）";
@@ -787,7 +805,7 @@ function calculate() {
           explanation = "70歳以上・低所得Ⅱ（世帯上限）";
         }
         break;
-      case "low_i": // 低所得Ⅰ（年金80万以下等）
+      case "low_i": // 低所得Ⅰ
         if (treatmentType === "outpatient") {
           cap = 8000;
           explanation = "70歳以上・低所得Ⅰ（外来個人単位）";
@@ -804,21 +822,20 @@ function calculate() {
     explanation += "／多数回該当を適用";
   }
 
-  // 窓口の基本自己負担割合の決定
   let burdenRate = 0.30;
   if (ageCategory === "70to74") {
     if (["top", "high_ii", "high_i"].includes(category)) {
       burdenRate = 0.30;
     } else {
-      burdenRate = 0.20; // 70～74歳一般
+      burdenRate = 0.20;
     }
   } else if (ageCategory === "over75") {
     if (["top", "high_ii", "high_i"].includes(category)) {
       burdenRate = 0.30;
     } else if (category === "middle") {
-      burdenRate = 0.20; // 後期高齢者・一定所得者2割（特例配慮措置考慮外の基本値）
+      burdenRate = 0.20;
     } else {
-      burdenRate = 0.10; // 非課税世帯等
+      burdenRate = 0.10;
     }
   }
 
@@ -853,7 +870,6 @@ function toggleDebug() {
   debug.style.display = debug.style.display === "block" ? "none" : "block";
 }
 
-// 初期実行
 updateAgeUI();
 
 </script>
