@@ -198,6 +198,31 @@ button {
   text-align: center;
 }
 
+.formula-box {
+  background: #ffffff;
+  border: 1px solid #bcd8f3;
+  border-radius: 8px;
+  padding: 12px;
+  margin: 12px 0;
+  font-size: .9rem;
+}
+
+.formula-title {
+  font-weight: bold;
+  color: #075ca8;
+  margin-bottom: 4px;
+}
+
+.formula-code {
+  font-family: monospace;
+  background: #f4f4f4;
+  padding: 4px 8px;
+  border-radius: 4px;
+  display: block;
+  margin: 6px 0;
+  word-break: break-all;
+}
+
 .small {
   font-size: .78rem;
   color: #666;
@@ -342,10 +367,10 @@ hr {
     高額療養費は診療月によって制度が変わるため、診療年月を選択してください。
   </div>
 
-  <label for="medicalCost">その月の医療費総額（10割）</label>
+  <label for="medicalCost">想定の医療費総額（10割）</label>
   <input id="medicalCost" type="number" min="0" step="1000" value="1000000" placeholder="例：1000000">
   <div class="help">
-    「医療費100万円」は、窓口での支払額ではなく保険適用前の10割の総医療費です。
+    ※窓口での支払額ではなく、保険適用前（10割）の総医療費の見込み額を入力します。
   </div>
 
   <label for="treatmentType" id="treatmentTypeLabel">診療タイプ（70歳以上のみ選択）</label>
@@ -374,6 +399,14 @@ hr {
   <div class="big-message" id="resultMessage"></div>
 
   <hr>
+
+  <!-- 計算式表示枠 -->
+  <div class="formula-box">
+    <div class="formula-title">📐 条件に基づく基本計算式（法定）</div>
+    <div class="formula-code" id="baseFormulaText">-</div>
+    <div class="small" id="formulaNote"></div>
+  </div>
+
   <div id="calculationDetail"></div>
 
   <div class="warning">
@@ -441,7 +474,6 @@ function initWarekiSelects() {
   monthSelect.innerHTML = "";
   daySelect.innerHTML = "";
 
-  // 年 (1～64年)
   for (let y = 1; y <= 64; y++) {
     const opt = document.createElement("option");
     opt.value = y;
@@ -449,7 +481,6 @@ function initWarekiSelects() {
     yearSelect.appendChild(opt);
   }
 
-  // 月 (1～12月)
   for (let m = 1; m <= 12; m++) {
     const opt = document.createElement("option");
     opt.value = m;
@@ -457,7 +488,6 @@ function initWarekiSelects() {
     monthSelect.appendChild(opt);
   }
 
-  // 日 (1～31日)
   for (let d = 1; d <= 31; d++) {
     const opt = document.createElement("option");
     opt.value = d;
@@ -465,7 +495,6 @@ function initWarekiSelects() {
     daySelect.appendChild(opt);
   }
 
-  // 初期値（例: 昭和25年1月1日）
   document.getElementById("birthEra").value = "S";
   yearSelect.value = 25;
   monthSelect.value = 1;
@@ -474,20 +503,18 @@ function initWarekiSelects() {
   onBirthdateChange();
 }
 
-/* 元号と和暦年から西暦を求める */
 function convertWarekiToSeireki(era, year) {
   const y = Number(year);
   switch (era) {
-    case "S": return 1925 + y; // 昭和
-    case "H": return 1988 + y; // 平成
-    case "R": return 2018 + y; // 令和
-    case "T": return 1911 + y; // 大正
-    case "M": return 1867 + y; // 明治
+    case "S": return 1925 + y;
+    case "H": return 1988 + y;
+    case "R": return 2018 + y;
+    case "T": return 1911 + y;
+    case "M": return 1867 + y;
     default: return null;
   }
 }
 
-/* 西暦から元号と和暦年を求める */
 function convertSeirekiToWareki(seirekiYear) {
   const y = Number(seirekiYear);
   if (y >= 2019) return { era: "R", year: y - 2018 };
@@ -651,7 +678,7 @@ async function runOCR(canvas) {
 
 
 /* =========================================================
-   4. OCR結果の解析・直接フォーム書き込み（和暦対応）
+   4. OCR解析・直接フォーム入力
 ========================================================= */
 
 function parseOCRResult(text) {
@@ -665,7 +692,6 @@ function parseOCRResult(text) {
 
   let detectedItems = [];
 
-  /* --- A. 生年月日抽出（和暦優先） --- */
   const warekiRegex = /(明治|大正|昭和|平成|令和|昭|平|令|[MTSHR])\s*(\d{1,2})\s*年?\s*(\d{1,2})\s*月?\s*(\d{1,2})\s*日?/;
   const seirekiRegex = /(19\d{2}|20\d{2})\s*年?\s*(\d{1,2})\s*月?\s*(\d{1,2})\s*日?/;
 
@@ -706,7 +732,6 @@ function parseOCRResult(text) {
     detectedItems.push("生年月日");
   }
 
-  /* --- B. 所得区分・限度区分の抽出 --- */
   let matchedCategory = null;
   const isOver70 = document.getElementById("ageCategory").value !== "under70";
 
@@ -737,7 +762,6 @@ function parseOCRResult(text) {
     detectedItems.push("所得区分");
   }
 
-  /* --- 通知表示 --- */
   const notice = document.getElementById("ocrNotice");
   if (detectedItems.length > 0) {
     notice.innerHTML = `✓ 画像から <strong>${detectedItems.join("・")}</strong> を読み取って入力フォームへ反映しました。誤りがないかご確認ください。`;
@@ -758,7 +782,7 @@ function reparseOCR() {
 
 
 /* =========================================================
-   5. 和暦生年月日から年齢・年齢区分を自動計算する処理
+   5. 和暦生年月日から年齢の自動計算
 ========================================================= */
 
 function onBirthdateChange() {
@@ -798,7 +822,7 @@ function onBirthdateChange() {
 
 
 /* =========================================================
-   6. 年齢UIおよび所得区分の連動切り替え
+   6. UIおよび所得区分の連動切り替え
 ========================================================= */
 
 function updateAgeUI() {
@@ -834,7 +858,7 @@ function updateAgeUI() {
 
 
 /* =========================================================
-   7. 高額療養費計算（厚生労働省ガイドライン基準）
+   7. 高額療養費計算（ベース計算式表示機能付き）
 ========================================================= */
 
 function calculate() {
@@ -851,7 +875,7 @@ function calculate() {
   }
 
   if (!cost || cost <= 0) {
-    alert("医療費を入力してください。");
+    alert("想定の医療費を入力してください。");
     return;
   }
 
@@ -859,6 +883,8 @@ function calculate() {
   let multipleCap = null;
   let annualCapNote = "";
   let explanation = "";
+  let baseFormula = "";
+  let formulaNote = "";
 
   /* --- 70歳未満 --- */
   if (ageCategory === "under70") {
@@ -866,26 +892,34 @@ function calculate() {
       case "top":
         cap = 252600 + Math.max(0, cost - 842000) * 0.01;
         multipleCap = 140100;
+        baseFormula = "252,600円 + (総医療費 - 842,000円) × 1%";
         explanation = "70歳未満・区分ア（上位所得者）";
+        if (cost <= 842000) formulaNote = "※総医療費が842,000円以下のため、上限額は固定額（252,600円）となります。";
         break;
       case "high":
         cap = 167400 + Math.max(0, cost - 558000) * 0.01;
         multipleCap = 93000;
+        baseFormula = "167,400円 + (総医療費 - 558,000円) × 1%";
         explanation = "70歳未満・区分イ（高所得）";
+        if (cost <= 558000) formulaNote = "※総医療費が558,000円以下のため、上限額は固定額（167,400円）となります。";
         break;
       case "middle":
         cap = 80100 + Math.max(0, cost - 267000) * 0.01;
         multipleCap = 44400;
+        baseFormula = "80,100円 + (総医療費 - 267,000円) × 1%";
         explanation = "70歳未満・区分ウ（一般所得）";
+        if (cost <= 267000) formulaNote = "※総医療費が267,000円以下のため、上限額は固定額（80,100円）となります。";
         break;
       case "low":
         cap = 57600;
         multipleCap = 44400;
+        baseFormula = "57,600円（定額）";
         explanation = "70歳未満・区分エ（一定以下の所得）";
         break;
       case "nonTax":
         cap = 35400;
         multipleCap = 24600;
+        baseFormula = "35,400円（定額）";
         explanation = "70歳未満・区分オ（住民税非課税世帯）";
         break;
     }
@@ -896,53 +930,68 @@ function calculate() {
       case "top":
         cap = 252600 + Math.max(0, cost - 842000) * 0.01;
         multipleCap = 140100;
+        baseFormula = "252,600円 + (総医療費 - 842,000円) × 1%";
         explanation = "70歳以上・現役並みⅢ（年収約1,160万円～）";
+        if (cost <= 842000) formulaNote = "※総医療費が842,000円以下のため、上限額は固定額（252,600円）となります。";
         break;
       case "high_ii":
         cap = 167400 + Math.max(0, cost - 558000) * 0.01;
         multipleCap = 93000;
+        baseFormula = "167,400円 + (総医療費 - 558,000円) × 1%";
         explanation = "70歳以上・現役並みⅡ（年収約770万～1,160万円）";
+        if (cost <= 558000) formulaNote = "※総医療費が558,000円以下のため、上限額は固定額（167,400円）となります。";
         break;
       case "high_i":
         cap = 80100 + Math.max(0, cost - 267000) * 0.01;
         multipleCap = 44400;
+        baseFormula = "80,100円 + (総医療費 - 267,000円) × 1%";
         explanation = "70歳以上・現役並みⅠ（年収約370万～770万円）";
+        if (cost <= 267000) formulaNote = "※総医療費が267,000円以下のため、上限額は固定額（80,100円）となります。";
         break;
       case "middle":
         if (treatmentType === "outpatient") {
           cap = 18000;
+          baseFormula = "18,000円（月額定額）";
           annualCapNote = "（※外来個人の年間上限額は14.4万円）";
           explanation = "70歳以上・一般所得（外来個人単位）";
         } else {
           cap = 57600;
           multipleCap = 44400;
+          baseFormula = "57,600円（月額定額）";
           explanation = "70歳以上・一般所得（世帯上限）";
         }
         break;
       case "low_ii":
         if (treatmentType === "outpatient") {
           cap = 8000;
+          baseFormula = "8,000円（月額定額）";
           explanation = "70歳以上・低所得Ⅱ（外来個人単位）";
         } else {
           cap = 24600;
+          baseFormula = "24,600円（月額定額）";
           explanation = "70歳以上・低所得Ⅱ（世帯上限）";
         }
         break;
       case "low_i":
         if (treatmentType === "outpatient") {
           cap = 8000;
+          baseFormula = "8,000円（月額定額）";
           explanation = "70歳以上・低所得Ⅰ（外来個人単位）";
         } else {
           cap = 15000;
+          baseFormula = "15,000円（月額定額）";
           explanation = "70歳以上・低所得Ⅰ（世帯上限）";
         }
         break;
     }
   }
 
+  // 多数回該当の適用判断
   if (multiple === "3" && multipleCap !== null) {
     cap = Math.min(cap, multipleCap);
+    baseFormula += ` ➔ 多数回該当適用で定額 【${multipleCap.toLocaleString()}円】`;
     explanation += "／多数回該当を適用";
+    formulaNote = "※過去12か月以内に3回以上高額療養費が適用されているため、多数回該当の上限額（定額）が自動適用されました。";
   }
 
   let burdenRate = 0.30;
@@ -973,10 +1022,15 @@ function calculate() {
     ? "通常の自己負担額より<br><strong>" + Math.round(saved).toLocaleString() + "円</strong> 軽くなる可能性があります"
     : "通常の自己負担額が上限額を下回っています。";
 
+  // ベース計算式のセット
+  document.getElementById("baseFormulaText").textContent = baseFormula;
+  document.getElementById("formulaNote").textContent = formulaNote;
+
+  // 内訳・計算プロセスの組み立て
   let detail = "";
-  detail += "<p><strong>総医療費（10割）:</strong> " + cost.toLocaleString() + "円</p>";
-  detail += "<p><strong>通常の窓口負担（" + Math.round(burdenRate * 10) + "割）:</strong> " + normalBurden.toLocaleString() + "円</p>";
-  detail += "<p><strong>高額療養費の上限額（目安）:</strong> " + Math.round(cap).toLocaleString() + "円 " + annualCapNote + "</p>";
+  detail += "<p><strong>想定医療費（10割総額）:</strong> " + cost.toLocaleString() + "円</p>";
+  detail += "<p><strong>窓口負担目安（" + Math.round(burdenRate * 10) + "割）:</strong> " + cost.toLocaleString() + "円 × " + burdenRate + " = " + normalBurden.toLocaleString() + "円</p>";
+  detail += "<p><strong>高額療養費上限額（目安）:</strong> " + Math.round(cap).toLocaleString() + "円 " + annualCapNote + "</p>";
   detail += "<p class='small'>" + explanation + "</p>";
 
   document.getElementById("calculationDetail").innerHTML = detail;
@@ -993,7 +1047,6 @@ function toggleDebug() {
   debug.style.display = debug.style.display === "block" ? "none" : "block";
 }
 
-// 起動時の初期化処理
 initWarekiSelects();
 
 </script>
