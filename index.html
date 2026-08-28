@@ -242,7 +242,6 @@ hr {
   </div>
 
   <div class="ocr-area">
-    <!-- カメラ起動用 input (captureあり) -->
     <input
       id="cameraInput"
       type="file"
@@ -251,7 +250,6 @@ hr {
       class="hidden"
     >
 
-    <!-- ファイル・アルバム選択用 input (captureなし) -->
     <input
       id="fileInput"
       type="file"
@@ -259,18 +257,25 @@ hr {
       class="hidden"
     >
 
-    <!-- カメラ起動ボタン -->
     <button
       class="primary"
       onclick="document.getElementById('cameraInput').click()">
       📷 保険資格情報を撮影する
     </button>
 
-    <!-- アルバム選択ボタン -->
     <button
       class="secondary"
       onclick="document.getElementById('fileInput').click()">
       🖼️ 画像ファイルを選ぶ
+    </button>
+
+    <!-- 解析テキスト保持時の再実行ボタン -->
+    <button
+      id="reparseBtn"
+      class="secondary"
+      style="display:none; background:#fff3cd; color:#856404; border:1px solid #ffeeba;"
+      onclick="reparseOCR()">
+      🔄 解析結果から自動入力し直す
     </button>
 
     <img id="preview" alt="撮影画像">
@@ -397,7 +402,7 @@ const CATEGORY_OPTIONS = {
 };
 
 /* =========================================================
-   1. 画像選択・実行フロー（カメラ・ファイル選択を分離）
+   1. 画像選択・実行フロー
 ========================================================= */
 
 async function handleImageFile(file) {
@@ -541,6 +546,11 @@ async function runOCR(canvas) {
 
   parseOCRResult(lastOCRText);
   progress.textContent = "";
+
+  // 解析完了後に再実行ボタンを表示
+  if (lastOCRText.trim().length > 0) {
+    document.getElementById("reparseBtn").style.display = "block";
+  }
 }
 
 
@@ -549,6 +559,8 @@ async function runOCR(canvas) {
 ========================================================= */
 
 function parseOCRResult(text) {
+  if (!text) return;
+
   let normalized = text
     .replace(/[０-９]/g, s => String.fromCharCode(s.charCodeAt(0) - 0xfee0))
     .replace(/[Ａ-Ｚａ-ｚ]/g, s => String.fromCharCode(s.charCodeAt(0) - 0xfee0))
@@ -627,12 +639,21 @@ function parseOCRResult(text) {
   /* --- 通知表示 --- */
   const notice = document.getElementById("ocrNotice");
   if (detectedItems.length > 0) {
-    notice.innerHTML = `✓ 画像から <strong>${detectedItems.join("・")}</strong> を読み取って入力フォームへ自動反映しました。誤りがないかご確認ください。`;
+    notice.innerHTML = `✓ 画像から <strong>${detectedItems.join("・")}</strong> を読み取って入力フォームへ反映しました。`;
     notice.style.display = "block";
   } else {
     notice.innerHTML = "⚠️ 画像から生年月日や区分を自動読み取りできませんでした。手入力でご設定ください。";
     notice.style.display = "block";
   }
+}
+
+/* 保持テキストからの再解析処理 */
+function reparseOCR() {
+  if (!lastOCRText) {
+    alert("解析対象のテキストがありません。写真を撮影するか画像を選んでください。");
+    return;
+  }
+  parseOCRResult(lastOCRText);
 }
 
 
