@@ -77,7 +77,6 @@ label {
 select,
 input[type="number"],
 input[type="text"],
-input[type="date"],
 input[type="month"] {
   width: 100%;
   padding: 14px;
@@ -86,6 +85,18 @@ input[type="month"] {
   border-radius: 10px;
   font-size: 1rem;
   background: #fff;
+}
+
+/* 和暦レイアウト用 */
+.wareki-group {
+  display: flex;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.wareki-group select {
+  padding: 12px 6px;
+  margin-top: 0;
 }
 
 button {
@@ -269,7 +280,6 @@ hr {
       🖼️ 画像ファイルを選ぶ
     </button>
 
-    <!-- 解析テキスト保持時の再実行ボタン -->
     <button
       id="reparseBtn"
       class="secondary"
@@ -289,8 +299,25 @@ hr {
 <div class="card">
   <div class="step">② 医療費・患者情報について入力</div>
 
-  <label for="birthdate">生年月日</label>
-  <input id="birthdate" type="date" onchange="onBirthdateChange()">
+  <label>生年月日（和暦）</label>
+  <div class="wareki-group">
+    <select id="birthEra" onchange="onBirthdateChange()" style="flex: 2.2;">
+      <option value="S">昭和</option>
+      <option value="H">平成</option>
+      <option value="R">令和</option>
+      <option value="T">大正</option>
+      <option value="M">明治</option>
+    </select>
+    <select id="birthYear" onchange="onBirthdateChange()" style="flex: 2;">
+      <!-- JavaScriptで動的生成 -->
+    </select>
+    <select id="birthMonth" onchange="onBirthdateChange()" style="flex: 1.8;">
+      <!-- JavaScriptで動的生成 -->
+    </select>
+    <select id="birthDay" onchange="onBirthdateChange()" style="flex: 1.8;">
+      <!-- JavaScriptで動的生成 -->
+    </select>
+  </div>
 
   <label for="calculatedAge">年齢（自動計算）</label>
   <input id="calculatedAge" type="text" readonly placeholder="生年月日を選択すると自動計算されます" style="background:#f0f0f0;">
@@ -400,6 +427,76 @@ const CATEGORY_OPTIONS = {
     { value: "low_i", label: "低所得Ⅰ（区分Ⅰ / 年金収入80万円以下等）" }
   ]
 };
+
+/* =========================================================
+   0. 和暦セレクトボックスの初期化処理
+========================================================= */
+
+function initWarekiSelects() {
+  const yearSelect = document.getElementById("birthYear");
+  const monthSelect = document.getElementById("birthMonth");
+  const daySelect = document.getElementById("birthDay");
+
+  yearSelect.innerHTML = "";
+  monthSelect.innerHTML = "";
+  daySelect.innerHTML = "";
+
+  // 年 (1～64年)
+  for (let y = 1; y <= 64; y++) {
+    const opt = document.createElement("option");
+    opt.value = y;
+    opt.textContent = (y === 1 ? "元" : y) + "年";
+    yearSelect.appendChild(opt);
+  }
+
+  // 月 (1～12月)
+  for (let m = 1; m <= 12; m++) {
+    const opt = document.createElement("option");
+    opt.value = m;
+    opt.textContent = m + "月";
+    monthSelect.appendChild(opt);
+  }
+
+  // 日 (1～31日)
+  for (let d = 1; d <= 31; d++) {
+    const opt = document.createElement("option");
+    opt.value = d;
+    opt.textContent = d + "日";
+    daySelect.appendChild(opt);
+  }
+
+  // 初期値（例: 昭和25年1月1日）
+  document.getElementById("birthEra").value = "S";
+  yearSelect.value = 25;
+  monthSelect.value = 1;
+  daySelect.value = 1;
+
+  onBirthdateChange();
+}
+
+/* 元号と和暦年から西暦を求める */
+function convertWarekiToSeireki(era, year) {
+  const y = Number(year);
+  switch (era) {
+    case "S": return 1925 + y; // 昭和
+    case "H": return 1988 + y; // 平成
+    case "R": return 2018 + y; // 令和
+    case "T": return 1911 + y; // 大正
+    case "M": return 1867 + y; // 明治
+    default: return null;
+  }
+}
+
+/* 西暦から元号と和暦年を求める */
+function convertSeirekiToWareki(seirekiYear) {
+  const y = Number(seirekiYear);
+  if (y >= 2019) return { era: "R", year: y - 2018 };
+  if (y >= 1989) return { era: "H", year: y - 1988 };
+  if (y >= 1926) return { era: "S", year: y - 1925 };
+  if (y >= 1912) return { era: "T", year: y - 1911 };
+  return { era: "M", year: y - 1867 };
+}
+
 
 /* =========================================================
    1. 画像選択・実行フロー
@@ -547,7 +644,6 @@ async function runOCR(canvas) {
   parseOCRResult(lastOCRText);
   progress.textContent = "";
 
-  // 解析完了後に再実行ボタンを表示
   if (lastOCRText.trim().length > 0) {
     document.getElementById("reparseBtn").style.display = "block";
   }
@@ -555,7 +651,7 @@ async function runOCR(canvas) {
 
 
 /* =========================================================
-   4. OCR結果の解析・直接フォーム書き込み
+   4. OCR結果の解析・直接フォーム書き込み（和暦対応）
 ========================================================= */
 
 function parseOCRResult(text) {
@@ -564,43 +660,48 @@ function parseOCRResult(text) {
   let normalized = text
     .replace(/[０-９]/g, s => String.fromCharCode(s.charCodeAt(0) - 0xfee0))
     .replace(/[Ａ-Ｚａ-ｚ]/g, s => String.fromCharCode(s.charCodeAt(0) - 0xfee0))
+    .replace(/元/g, "1")
     .toUpperCase();
 
   let detectedItems = [];
 
-  /* --- A. 生年月日抽出 --- */
+  /* --- A. 生年月日抽出（和暦優先） --- */
   const warekiRegex = /(明治|大正|昭和|平成|令和|昭|平|令|[MTSHR])\s*(\d{1,2})\s*年?\s*(\d{1,2})\s*月?\s*(\d{1,2})\s*日?/;
   const seirekiRegex = /(19\d{2}|20\d{2})\s*年?\s*(\d{1,2})\s*月?\s*(\d{1,2})\s*日?/;
 
+  let eraCode = null, eraYear = null, month = null, day = null;
   let birthMatch = normalized.match(warekiRegex);
-  let year = null, month = null, day = null;
 
   if (birthMatch) {
     const eraStr = birthMatch[1];
-    let eraYear = Number(birthMatch[2]);
+    eraYear = Number(birthMatch[2]);
     month = Number(birthMatch[3]);
     day = Number(birthMatch[4]);
 
-    if (/^(昭和|昭|S)$/i.test(eraStr)) year = 1925 + eraYear;
-    else if (/^(平成|平|H)$/i.test(eraStr)) year = 1988 + eraYear;
-    else if (/^(令和|令|R)$/i.test(eraStr)) year = 2018 + eraYear;
-    else if (/^(大正|T)$/i.test(eraStr)) year = 1911 + eraYear;
-    else if (/^(明治|M)$/i.test(eraStr)) year = 1867 + eraYear;
+    if (/^(昭和|昭|S)$/i.test(eraStr)) eraCode = "S";
+    else if (/^(平成|平|H)$/i.test(eraStr)) eraCode = "H";
+    else if (/^(令和|令|R)$/i.test(eraStr)) eraCode = "R";
+    else if (/^(大正|T)$/i.test(eraStr)) eraCode = "T";
+    else if (/^(明治|M)$/i.test(eraStr)) eraCode = "M";
   } else {
     birthMatch = normalized.match(seirekiRegex);
     if (birthMatch) {
-      year = Number(birthMatch[1]);
+      const seirekiYear = Number(birthMatch[1]);
       month = Number(birthMatch[2]);
       day = Number(birthMatch[3]);
+
+      const warekiObj = convertSeirekiToWareki(seirekiYear);
+      eraCode = warekiObj.era;
+      eraYear = warekiObj.year;
     }
   }
 
-  if (year && month && day && year > 1890 && month >= 1 && month <= 12 && day >= 1 && day <= 31) {
-    const formattedMonth = String(month).padStart(2, '0');
-    const formattedDay = String(day).padStart(2, '0');
-    const isoDate = `${year}-${formattedMonth}-${formattedDay}`;
+  if (eraCode && eraYear && month && day && month >= 1 && month <= 12 && day >= 1 && day <= 31) {
+    document.getElementById("birthEra").value = eraCode;
+    document.getElementById("birthYear").value = eraYear;
+    document.getElementById("birthMonth").value = month;
+    document.getElementById("birthDay").value = day;
 
-    document.getElementById("birthdate").value = isoDate;
     onBirthdateChange();
     detectedItems.push("生年月日");
   }
@@ -639,7 +740,7 @@ function parseOCRResult(text) {
   /* --- 通知表示 --- */
   const notice = document.getElementById("ocrNotice");
   if (detectedItems.length > 0) {
-    notice.innerHTML = `✓ 画像から <strong>${detectedItems.join("・")}</strong> を読み取って入力フォームへ反映しました。`;
+    notice.innerHTML = `✓ 画像から <strong>${detectedItems.join("・")}</strong> を読み取って入力フォームへ反映しました。誤りがないかご確認ください。`;
     notice.style.display = "block";
   } else {
     notice.innerHTML = "⚠️ 画像から生年月日や区分を自動読み取りできませんでした。手入力でご設定ください。";
@@ -647,7 +748,6 @@ function parseOCRResult(text) {
   }
 }
 
-/* 保持テキストからの再解析処理 */
 function reparseOCR() {
   if (!lastOCRText) {
     alert("解析対象のテキストがありません。写真を撮影するか画像を選んでください。");
@@ -658,17 +758,19 @@ function reparseOCR() {
 
 
 /* =========================================================
-   5. 生年月日から年齢・年齢区分を自動計算する処理
+   5. 和暦生年月日から年齢・年齢区分を自動計算する処理
 ========================================================= */
 
 function onBirthdateChange() {
-  const birthdateVal = document.getElementById("birthdate").value;
-  if (!birthdateVal) {
-    document.getElementById("calculatedAge").value = "";
-    return;
-  }
+  const era = document.getElementById("birthEra").value;
+  const year = document.getElementById("birthYear").value;
+  const month = document.getElementById("birthMonth").value;
+  const day = document.getElementById("birthDay").value;
 
-  const birthDate = new Date(birthdateVal);
+  const seirekiYear = convertWarekiToSeireki(era, year);
+  if (!seirekiYear) return;
+
+  const birthDate = new Date(seirekiYear, month - 1, day);
   const today = new Date();
 
   let age = today.getFullYear() - birthDate.getFullYear();
@@ -761,27 +863,27 @@ function calculate() {
   /* --- 70歳未満 --- */
   if (ageCategory === "under70") {
     switch (category) {
-      case "top": // 区分ア
+      case "top":
         cap = 252600 + Math.max(0, cost - 842000) * 0.01;
         multipleCap = 140100;
         explanation = "70歳未満・区分ア（上位所得者）";
         break;
-      case "high": // 区分イ
+      case "high":
         cap = 167400 + Math.max(0, cost - 558000) * 0.01;
         multipleCap = 93000;
         explanation = "70歳未満・区分イ（高所得）";
         break;
-      case "middle": // 区分ウ
+      case "middle":
         cap = 80100 + Math.max(0, cost - 267000) * 0.01;
         multipleCap = 44400;
         explanation = "70歳未満・区分ウ（一般所得）";
         break;
-      case "low": // 区分エ
+      case "low":
         cap = 57600;
         multipleCap = 44400;
         explanation = "70歳未満・区分エ（一定以下の所得）";
         break;
-      case "nonTax": // 区分オ
+      case "nonTax":
         cap = 35400;
         multipleCap = 24600;
         explanation = "70歳未満・区分オ（住民税非課税世帯）";
@@ -791,22 +893,22 @@ function calculate() {
   /* --- 70歳以上 --- */
   else {
     switch (category) {
-      case "top": // 現役並みⅢ
+      case "top":
         cap = 252600 + Math.max(0, cost - 842000) * 0.01;
         multipleCap = 140100;
         explanation = "70歳以上・現役並みⅢ（年収約1,160万円～）";
         break;
-      case "high_ii": // 現役並みⅡ
+      case "high_ii":
         cap = 167400 + Math.max(0, cost - 558000) * 0.01;
         multipleCap = 93000;
         explanation = "70歳以上・現役並みⅡ（年収約770万～1,160万円）";
         break;
-      case "high_i": // 現役並みⅠ
+      case "high_i":
         cap = 80100 + Math.max(0, cost - 267000) * 0.01;
         multipleCap = 44400;
         explanation = "70歳以上・現役並みⅠ（年収約370万～770万円）";
         break;
-      case "middle": // 一般
+      case "middle":
         if (treatmentType === "outpatient") {
           cap = 18000;
           annualCapNote = "（※外来個人の年間上限額は14.4万円）";
@@ -817,7 +919,7 @@ function calculate() {
           explanation = "70歳以上・一般所得（世帯上限）";
         }
         break;
-      case "low_ii": // 低所得Ⅱ
+      case "low_ii":
         if (treatmentType === "outpatient") {
           cap = 8000;
           explanation = "70歳以上・低所得Ⅱ（外来個人単位）";
@@ -826,7 +928,7 @@ function calculate() {
           explanation = "70歳以上・低所得Ⅱ（世帯上限）";
         }
         break;
-      case "low_i": // 低所得Ⅰ
+      case "low_i":
         if (treatmentType === "outpatient") {
           cap = 8000;
           explanation = "70歳以上・低所得Ⅰ（外来個人単位）";
@@ -891,7 +993,8 @@ function toggleDebug() {
   debug.style.display = debug.style.display === "block" ? "none" : "block";
 }
 
-updateAgeUI();
+// 起動時の初期化処理
+initWarekiSelects();
 
 </script>
 
