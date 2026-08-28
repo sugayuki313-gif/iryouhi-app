@@ -1,360 +1,817 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>高額療養費 自己負担上限額 算定ツール</title>
-  <style>
-    :root {
-      --primary-color: #1b5e20;
-      --primary-light: #e8f5e9;
-      --border-color: #ccc;
-      --text-color: #333;
-      --bg-color: #f9f9f9;
-    }
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>医療費・高額療養費かんたんシミュレーター</title>
 
-    body {
-      font-family: "Helvetica Neue", Arial, "Hiragino Kaku Gothic ProN", "Hiragino Sans", Meiryo, sans-serif;
-      line-height: 1.6;
-      color: var(--text-color);
-      background-color: var(--bg-color);
-      margin: 0;
-      padding: 20px;
-    }
+<!-- Tesseract.js v5 -->
+<script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
 
-    .container {
-      max-width: 800px;
-      margin: 0 auto;
-      background: #ffffff;
-      padding: 24px;
-      border-radius: 8px;
-      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-    }
+<style>
+* {
+  box-sizing: border-box;
+}
 
-    h1 {
-      font-size: 1.5rem;
-      color: var(--primary-color);
-      border-bottom: 2px solid var(--primary-color);
-      padding-bottom: 8px;
-      margin-top: 0;
-    }
+body {
+  margin: 0;
+  padding: 16px;
+  background: #f3f6f8;
+  color: #222;
+  font-family:
+    -apple-system,
+    BlinkMacSystemFont,
+    "Noto Sans JP",
+    "Yu Gothic",
+    "Meiryo",
+    sans-serif;
+  line-height: 1.6;
+}
 
-    .info-badge {
-      display: inline-block;
-      background-color: var(--primary-light);
-      color: var(--primary-color);
-      padding: 4px 12px;
-      border-radius: 16px;
-      font-size: 0.85rem;
-      font-weight: bold;
-      margin-bottom: 16px;
-    }
+.container {
+  max-width: 600px;
+  margin: auto;
+}
 
-    .form-group {
-      margin-bottom: 16px;
-    }
+.card {
+  background: #fff;
+  border-radius: 16px;
+  padding: 22px;
+  margin-bottom: 16px;
+  box-shadow: 0 3px 12px rgba(0,0,0,.08);
+}
 
-    label {
-      display: block;
-      font-weight: bold;
-      margin-bottom: 6px;
-    }
+h1 {
+  font-size: 1.35rem;
+  text-align: center;
+  margin: 0 0 8px;
+  color: #075ca8;
+}
 
-    select, input[type="number"] {
-      width: 100%;
-      padding: 10px;
-      border: 1px solid var(--border-color);
-      border-radius: 4px;
-      font-size: 1rem;
-      box-sizing: border-box;
-    }
+.subtitle {
+  text-align: center;
+  color: #555;
+  font-size: .9rem;
+  margin-bottom: 20px;
+}
 
-    .radio-group {
-      display: flex;
-      gap: 16px;
-    }
+.step {
+  font-size: 1.05rem;
+  font-weight: bold;
+  margin: 20px 0 8px;
+}
 
-    .radio-group label {
-      font-weight: normal;
-      cursor: pointer;
-    }
+.help {
+  font-size: .85rem;
+  color: #666;
+  margin-top: 5px;
+}
 
-    button {
-      width: 100%;
-      background-color: var(--primary-color);
-      color: #ffffff;
-      border: none;
-      padding: 12px;
-      font-size: 1.1rem;
-      font-weight: bold;
-      border-radius: 4px;
-      cursor: pointer;
-      transition: background-color 0.2s;
-      margin-top: 8px;
-    }
+label {
+  display: block;
+  font-weight: bold;
+  margin-top: 14px;
+}
 
-    button:hover {
-      background-color: #144617;
-    }
+select,
+input[type="number"],
+input[type="text"],
+input[type="date"],
+input[type="month"] {
+  width: 100%;
+  padding: 14px;
+  margin-top: 6px;
+  border: 1px solid #bbb;
+  border-radius: 10px;
+  font-size: 1rem;
+  background: #fff;
+}
 
-    .result-card {
-      margin-top: 24px;
-      padding: 20px;
-      background-color: #f0f7f0;
-      border: 2px solid var(--primary-color);
-      border-radius: 6px;
-      display: none;
-    }
+button {
+  width: 100%;
+  border: 0;
+  border-radius: 12px;
+  padding: 15px;
+  font-size: 1rem;
+  font-weight: bold;
+  cursor: pointer;
+  margin-top: 10px;
+}
 
-    .result-card h2 {
-      margin-top: 0;
-      font-size: 1.2rem;
-      color: var(--primary-color);
-    }
+.primary {
+  background: #075ca8;
+  color: white;
+}
 
-    .amount-display {
-      font-size: 2rem;
-      font-weight: bold;
-      color: #d32f2f;
-      margin: 8px 0;
-    }
+.secondary {
+  background: #e8f0f7;
+  color: #075ca8;
+}
 
-    .notes {
-      margin-top: 16px;
-      font-size: 0.85rem;
-      color: #666;
-      border-top: 1px dashed var(--border-color);
-      padding-top: 12px;
-    }
+.warning {
+  background: #fff6df;
+  border-left: 5px solid #e3a400;
+  padding: 14px;
+  border-radius: 8px;
+  margin-top: 15px;
+}
 
-    .notes ul {
-      padding-left: 20px;
-      margin: 4px 0;
-    }
-  </style>
+.privacy {
+  background: #edf8f0;
+  border-left: 5px solid #2e8b57;
+  padding: 14px;
+  border-radius: 8px;
+  font-size: .9rem;
+}
+
+.ocr-area {
+  border: 2px dashed #aaa;
+  border-radius: 12px;
+  padding: 18px;
+  text-align: center;
+  margin-top: 10px;
+}
+
+#preview {
+  max-width: 100%;
+  max-height: 360px;
+  margin-top: 15px;
+  border-radius: 10px;
+  display: none;
+}
+
+.progress {
+  margin-top: 12px;
+  font-size: .9rem;
+  color: #555;
+  font-weight: bold;
+}
+
+.ocr-notice {
+  background: #e3f2fd;
+  border: 1px solid #90caf9;
+  border-radius: 8px;
+  padding: 12px;
+  margin-top: 15px;
+  font-size: .9rem;
+  color: #0d47a1;
+  display: none;
+}
+
+.result {
+  display: none;
+  background: #eef7ff;
+  border-left: 6px solid #075ca8;
+  padding: 18px;
+  border-radius: 10px;
+  margin-top: 20px;
+}
+
+.result-title {
+  text-align: center;
+  font-size: 1rem;
+}
+
+.result-price {
+  text-align: center;
+  font-size: 2rem;
+  font-weight: bold;
+  color: #c62828;
+  margin: 8px 0;
+}
+
+.big-message {
+  font-size: 1.05rem;
+  font-weight: bold;
+  text-align: center;
+}
+
+.small {
+  font-size: .78rem;
+  color: #666;
+}
+
+#debugText {
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-size: .75rem;
+  background: #222;
+  color: #eee;
+  padding: 10px;
+  border-radius: 8px;
+  max-height: 220px;
+  overflow: auto;
+  display: none;
+}
+
+.hidden {
+  display: none !important;
+}
+
+hr {
+  border: 0;
+  border-top: 1px solid #ddd;
+  margin: 20px 0;
+}
+</style>
 </head>
+
 <body>
 
 <div class="container">
-  <h1>高額療養費 自己負担上限額 算定ツール</h1>
-  <div class="info-badge" id="applied-version-badge">制度基準：確認中...</div>
 
-  <form id="calcForm">
-    <!-- 年齢区分 -->
-    <div class="form-group">
-      <label for="ageCategory">対象者の区分（年齢）</label>
-      <select id="ageCategory" onchange="updateCategoryOptions()">
-        <option value="under70">69歳以下</option>
-        <option value="over70" selected>70歳以上</option>
-      </select>
-    </div>
-
-    <!-- 所得区分 -->
-    <div class="form-group">
-      <label for="incomeCategory">所得区分</label>
-      <select id="incomeCategory">
-        <!-- JSで動的に設定 -->
-      </select>
-    </div>
-
-    <!-- 診療区分（入院/外来） -->
-    <div class="form-group">
-      <label>診療区分</label>
-      <div class="radio-group">
-        <label><input type="radio" name="treatmentType" value="inpatient" checked> 入院（世帯合算）</label>
-        <label><input type="radio" name="treatmentType" value="outpatient"> 外来（個人単位）</label>
-      </div>
-    </div>
-
-    <!-- 10割総医療費 -->
-    <div class="form-group">
-      <label for="medicalCost">医療費総額（10割・窓口支払前額） [円]</label>
-      <input type="number" id="medicalCost" placeholder="例: 1000000" min="0" step="10" required>
-    </div>
-
-    <!-- 多数回該当 -->
-    <div class="form-group">
-      <label for="multipleApp">多数回該当（過去12ヶ月で4か月目以降か）</label>
-      <select id="multipleApp">
-        <option value="1">該当しない（通常）</option>
-        <option value="3">該当する（多数回該当）</option>
-      </select>
-    </div>
-
-    <button type="button" onclick="handleCalculate()">上限額を計算する</button>
-  </form>
-
-  <!-- 計算結果エリア -->
-  <div class="result-card" id="resultCard">
-    <h2>概算自己負担上限額</h2>
-    <div class="amount-display" id="resultAmount">0 円</div>
-    <div id="subNote" style="font-weight: bold; color: #333;"></div>
-
-    <div class="notes">
-      <strong>【ご案内・注意事項】</strong>
-      <ul id="disclaimerList">
-        <!-- JSで動的挿入 -->
-      </ul>
-    </div>
+<div class="card">
+  <h1>医療費・高額療養費<br>かんたんシミュレーター</h1>
+  <div class="subtitle">
+    保険資格情報を撮影して、自己負担額の目安を確認できます
+  </div>
+  <div class="privacy">
+    <strong>🔒 個人情報について</strong><br>
+    このページでは、撮影した画像を自社サーバーへ送信する処理を行いません。
+    OCRは原則としてこの端末のブラウザ内で実行します。
   </div>
 </div>
 
+<!-- STEP 1: 画像読み取り -->
+<div class="card">
+  <div class="step">① 保険資格情報を撮影（任意）</div>
+  <div class="help">
+    保険証・資格確認書などの写真を撮影すると、フォームへ自動入力されます。
+  </div>
+
+  <div class="ocr-area">
+    <input
+      id="imageInput"
+      type="file"
+      accept="image/*"
+      capture="environment"
+      class="hidden"
+    >
+
+    <button
+      class="primary"
+      onclick="document.getElementById('imageInput').click()">
+      📷 保険資格情報を撮影する
+    </button>
+
+    <button
+      class="secondary"
+      onclick="document.getElementById('imageInput').click()">
+      画像ファイルを選ぶ
+    </button>
+
+    <img id="preview" alt="撮影画像">
+    <div id="ocrProgress" class="progress"></div>
+    <div id="ocrNotice" class="ocr-notice"></div>
+  </div>
+</div>
+
+<!-- STEP 2: 条件入力 -->
+<div class="card">
+  <div class="step">② 医療費・患者情報について入力</div>
+
+  <label for="birthdate">生年月日</label>
+  <input id="birthdate" type="date" onchange="onBirthdateChange()">
+
+  <label for="calculatedAge">年齢（自動計算）</label>
+  <input id="calculatedAge" type="text" readonly placeholder="生年月日を選択すると自動計算されます" style="background:#f0f0f0;">
+
+  <label for="ageCategory">年齢区分</label>
+  <select id="ageCategory" onchange="updateAgeCategoryOptions()">
+    <option value="under70">70歳未満</option>
+    <option value="over70">70歳以上</option>
+  </select>
+
+  <label for="category">所得区分・限度区分</label>
+  <select id="category">
+    <!-- JavaScriptで動的制御 -->
+  </select>
+
+  <hr>
+
+  <label for="treatmentMonth">診療年月</label>
+  <input id="treatmentMonth" type="month" value="2026-08">
+  <div class="help">
+    高額療養費は診療月によって制度が変わるため、診療年月を選択してください。
+  </div>
+
+  <label for="medicalCost">その月の医療費総額（10割）</label>
+  <input id="medicalCost" type="number" min="0" step="1000" value="1000000" placeholder="例：1000000">
+  <div class="help">
+    「医療費100万円」は、窓口での支払額ではなく保険適用前の10割の総医療費です。
+  </div>
+
+  <label for="treatmentType">診療区分（70歳以上のみ）</label>
+  <select id="treatmentType">
+    <option value="inpatient">入院・総医療費（世帯単位）</option>
+    <option value="outpatient">外来のみ（個人単位）</option>
+  </select>
+
+  <label for="multiple">過去12か月以内に高額療養費に該当した月</label>
+  <select id="multiple">
+    <option value="0">0～2回</option>
+    <option value="3">3回以上（4回目以降 / 多数回該当）</option>
+  </select>
+
+  <button class="primary" onclick="calculate()">
+    💰 自己負担額を計算する
+  </button>
+</div>
+
+<!-- RESULT -->
+<div class="card result" id="result">
+  <div class="result-title">この月の自己負担額の目安</div>
+  <div class="result-price" id="resultPrice">-</div>
+  <div class="big-message" id="resultMessage"></div>
+
+  <hr>
+  <div id="calculationDetail"></div>
+
+  <div class="warning">
+    <strong>⚠️ ご注意ください</strong><br><br>
+    この結果は患者向けの概算です。実際の支払額・高額療養費の支給額を確定するものではありません。<br><br>
+    ・入院時の食事代<br>
+    ・差額ベッド代<br>
+    ・文書料<br>
+    ・保険適用外の治療<br><br>
+    などは別途かかる場合があります。世帯合算や多数回該当などの条件によって実際の金額が変わる場合があります。
+  </div>
+</div>
+
+<!-- DEBUG -->
+<div class="card">
+  <button class="secondary" onclick="toggleDebug()">
+    OCRの解析テキスト原文を見る
+  </button>
+  <pre id="debugText"></pre>
+</div>
+
+<div class="card small">
+  <strong>適用制度・計算基準について</strong><br>
+  本ツールの計算ロジックは、<strong>厚生労働省「高額療養費制度」の基準方針</strong>に準拠しています。<br>
+  70歳以上の区分判定および窓口負担割合は、2022年10月施行の2割負担区分を含む現行制度に対応しています。
+</div>
+
+</div>
+
 <script>
-/* =========================================================
-   高額療養費計算ロジック（厚生労働省ガイドライン準拠）
-   適用基準: 平成30年8月診療分以降（2026年8月現在適用中）
-========================================================= */
+let lastOCRText = "";
+let ocrWorker = null;
 
-const HIGH_MEDICAL_CARE_CONFIG = {
-  versionInfo: "厚生労働省 平成30年8月改定基準（2026年8月現在適用）",
-  disclaimers: [
-    "本計算結果は単一の医療機関・レセプトにおける概算です。",
-    "入院時の食事代、差額ベッド代、先進医療費用等は含みません。",
-    "世帯合算や多数回該当の正確な判定・適用はご加入の医療保険者（協会けんぽ、市町村国保等）による確認が必要です。"
-  ]
-};
-
-// 選択肢の動的生成データ
-const CATEGORY_OPTIONS = {
-  under70: [
-    { value: "top", label: "区分ア（年収約1,160万円〜 / 健保標報83万円以上）" },
-    { value: "high", label: "区分イ（年収約770万〜約1,160万円 / 健保標報53万〜79万円）" },
-    { value: "middle", label: "区分ウ（年収約370万〜約770万円 / 健保標報28万〜50万円）" },
-    { value: "low", label: "区分エ（〜年収約370万円 / 健保標報26万円以下）" },
-    { value: "nonTax", label: "区分オ（住民税非課税者）" }
-  ],
-  over70: [
-    { value: "top", label: "現役並みⅢ（年収約1,160万円〜 / 課税所得690万円以上）" },
-    { value: "high_ii", label: "現役並みⅡ（年収約770万〜約1,160万円 / 課税所得380万円以上）" },
-    { value: "high_i", label: "現役並みⅠ（年収約370万〜約770万円 / 課税所得145万円以上）" },
-    { value: "middle", label: "一般（年収約156万〜約370万円 / 課税所得145万円未満等）" },
-    { value: "low_ii", label: "低所得Ⅱ（住民税非課税世帯）" },
-    { value: "low_i", label: "低所得Ⅰ（住民税非課税・年金収入80万円以下等）" }
-  ]
-};
-
-// 初期表示処理
+// 初期化処理
 window.addEventListener("DOMContentLoaded", () => {
-  document.getElementById("applied-version-badge").innerText = "制度基準：" + HIGH_MEDICAL_CARE_CONFIG.versionInfo;
-  updateCategoryOptions();
+  updateAgeCategoryOptions();
 });
 
-// 年齢区分に応じた所得区分の切り替え
-function updateCategoryOptions() {
-  const ageCategory = document.getElementById("ageCategory").value;
-  const selectElement = document.getElementById("incomeCategory");
-  selectElement.innerHTML = "";
+/* =========================================================
+   1. 画像選択・実行フロー
+========================================================= */
+document.getElementById("imageInput").addEventListener("change", async function(event) {
+  const file = event.target.files[0];
+  if (!file) return;
 
-  CATEGORY_OPTIONS[ageCategory].forEach(opt => {
-    const option = document.createElement("option");
-    option.value = opt.value;
-    option.textContent = opt.label;
-    selectElement.appendChild(option);
-  });
-}
-
-// 主計算関数
-function calculateCorrectCap(ageCategory, category, cost, treatmentType, multiple) {
-  let cap = 0;
-  let multipleCap = null;
-  let subNote = "";
-
-  if (ageCategory === "under70") {
-    switch (category) {
-      case "top":
-        cap = 252600 + Math.max(0, cost - 842000) * 0.01;
-        multipleCap = 140100;
-        break;
-      case "high":
-        cap = 167400 + Math.max(0, cost - 558000) * 0.01;
-        multipleCap = 93000;
-        break;
-      case "middle":
-        cap = 80100 + Math.max(0, cost - 267000) * 0.01;
-        multipleCap = 44400;
-        break;
-      case "low":
-        cap = 57600;
-        multipleCap = 44400;
-        break;
-      case "nonTax":
-        cap = 35400;
-        multipleCap = 24600;
-        break;
-    }
-  } else {
-    // 70歳以上
-    switch (category) {
-      case "top":
-        cap = 252600 + Math.max(0, cost - 842000) * 0.01;
-        multipleCap = 140100;
-        break;
-      case "high_ii":
-        cap = 167400 + Math.max(0, cost - 558000) * 0.01;
-        multipleCap = 93000;
-        break;
-      case "high_i":
-        cap = 80100 + Math.max(0, cost - 267000) * 0.01;
-        multipleCap = 44400;
-        break;
-      case "middle":
-        if (treatmentType === "outpatient") {
-          cap = 18000;
-          subNote = "※70歳以上・一般区分の外来個人上限は年間（8月〜翌7月）14万4,000円です。";
-        } else {
-          cap = 57600;
-          multipleCap = 44400;
-        }
-        break;
-      case "low_ii":
-        cap = (treatmentType === "outpatient") ? 8000 : 24600;
-        break;
-      case "low_i":
-        cap = (treatmentType === "outpatient") ? 8000 : 15000;
-        break;
-    }
-  }
-
-  // 多数回該当の計算
-  if (multiple === "3" && multipleCap !== null) {
-    cap = Math.min(cap, multipleCap);
-  }
-
-  return {
-    amount: Math.floor(cap),
-    subNote: subNote
-  };
-}
-
-// フォーム送信時のハンドラ
-function handleCalculate() {
-  const ageCategory = document.getElementById("ageCategory").value;
-  const category = document.getElementById("incomeCategory").value;
-  const cost = Number(document.getElementById("medicalCost").value);
-  const treatmentType = document.querySelector('input[name="treatmentType"]:checked').value;
-  const multiple = document.getElementById("multipleApp").value;
-
-  if (isNaN(cost) || cost <= 0) {
-    alert("正しく医療費総額（10割）を入力してください。");
+  if (!file.type.startsWith("image/")) {
+    alert("画像ファイルを選択してください。");
     return;
   }
 
-  const result = calculateCorrectCap(ageCategory, category, cost, treatmentType, multiple);
+  if (file.size > 15 * 1024 * 1024) {
+    alert("画像サイズが大きすぎます。15MB以下の画像を使用してください。");
+    return;
+  }
 
-  // 画面表示処理
-  document.getElementById("resultAmount").innerText = result.amount.toLocaleString() + " 円";
-  document.getElementById("subNote").innerText = result.subNote;
+  const imageURL = URL.createObjectURL(file);
+  const preview = document.getElementById("preview");
+  preview.src = imageURL;
+  preview.style.display = "block";
 
-  // 免責事項の出力
-  const disclaimerList = document.getElementById("disclaimerList");
-  disclaimerList.innerHTML = "";
-  HIGH_MEDICAL_CARE_CONFIG.disclaimers.forEach(text => {
-    const li = document.createElement("li");
-    li.innerText = text;
-    disclaimerList.appendChild(li);
+  const notice = document.getElementById("ocrNotice");
+  notice.style.display = "none";
+
+  document.getElementById("ocrProgress").textContent = "画像を最適化処理しています…";
+
+  try {
+    const processedCanvas = await preprocessImage(file);
+    await runOCR(processedCanvas);
+  } catch (error) {
+    console.error(error);
+    document.getElementById("ocrProgress").textContent = "";
+    alert("画像の読み取りに失敗しました。\n明るい場所で撮影し、文字が綺麗に写るように再度お試しください。");
+  } finally {
+    URL.revokeObjectURL(imageURL);
+  }
+});
+
+/* =========================================================
+   2. 画像前処理
+========================================================= */
+function preprocessImage(file) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+
+    img.onload = function() {
+      try {
+        const MAX_WIDTH = 2400;
+        let width = img.naturalWidth;
+        let height = img.naturalHeight;
+
+        if (width > MAX_WIDTH) {
+          const ratio = MAX_WIDTH / width;
+          width = Math.round(width * ratio);
+          height = Math.round(height * ratio);
+        }
+
+        const canvas = document.createElement("canvas");
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext("2d", { willReadFrequently: true });
+
+        ctx.fillStyle = "#ffffff";
+        ctx.fillRect(0, 0, width, height);
+        ctx.imageSmoothingEnabled = true;
+        ctx.imageSmoothingQuality = "high";
+        ctx.drawImage(img, 0, 0, width, height);
+
+        const imageData = ctx.getImageData(0, 0, width, height);
+        const data = imageData.data;
+
+        for (let i = 0; i < data.length; i += 4) {
+          const r = data[i];
+          const g = data[i + 1];
+          const b = data[i + 2];
+
+          let gray = 0.299 * r + 0.587 * g + 0.114 * b;
+          gray = ((gray - 128) * 1.35) + 128;
+          gray = Math.max(0, Math.min(255, gray));
+
+          data[i] = data[i + 1] = data[i + 2] = gray;
+        }
+
+        ctx.putImageData(imageData, 0, 0);
+        URL.revokeObjectURL(url);
+        resolve(canvas);
+      } catch (error) {
+        URL.revokeObjectURL(url);
+        reject(error);
+      }
+    };
+
+    img.onerror = function() {
+      URL.revokeObjectURL(url);
+      reject(new Error("画像を読み込めませんでした。"));
+    };
+
+    img.src = url;
   });
+}
 
-  document.getElementById("resultCard").style.display = "block";
+/* =========================================================
+   3. OCR実行 (Tesseract.js)
+========================================================= */
+async function runOCR(canvas) {
+  const progress = document.getElementById("ocrProgress");
+  progress.textContent = "OCRエンジンを準備しています…";
+
+  if (!ocrWorker) {
+    ocrWorker = await Tesseract.createWorker("jpn", 1, {
+      logger: function(message) {
+        if (message.status === "recognizing text") {
+          const percent = Math.round((message.progress || 0) * 100);
+          progress.textContent = "文字を読み取っています… " + percent + "%";
+        } else {
+          progress.textContent = message.status || "";
+        }
+      }
+    });
+  }
+
+  progress.textContent = "保険資格情報を解析中…";
+  const result = await ocrWorker.recognize(canvas);
+  lastOCRText = result.data.text || "";
+
+  document.getElementById("debugText").textContent = lastOCRText;
+
+  parseOCRResult(lastOCRText);
+  progress.textContent = "";
+}
+
+/* =========================================================
+   4. OCR結果の解析・直接フォーム書き込み
+========================================================= */
+function parseOCRResult(text) {
+  // 全角半角統一および「元」年表記の正規化
+  let normalized = text
+    .replace(/[０-９]/g, s => String.fromCharCode(s.charCodeAt(0) - 0xfee0))
+    .replace(/[Ａ-Ｚａ-ｚ]/g, s => String.fromCharCode(s.charCodeAt(0) - 0xfee0))
+    .replace(/(明治|大正|昭和|平成|令和|昭|平|令)\s*元\s*年/g, "$11年")
+    .toUpperCase();
+
+  let detectedItems = [];
+
+  /* --- A. 生年月日抽出 --- */
+  const warekiRegex = /(明治|大正|昭和|平成|令和|昭|平|令|[MTSHR])\s*(\d{1,2})\s*年?\s*(\d{1,2})\s*月?\s*(\d{1,2})\s*日?/;
+  const seirekiRegex = /(19\d{2}|20\d{2})\s*年?\s*(\d{1,2})\s*月?\s*(\d{1,2})\s*日?/;
+
+  let birthMatch = normalized.match(warekiRegex);
+  let year = null, month = null, day = null;
+
+  if (birthMatch) {
+    const eraStr = birthMatch[1];
+    let eraYear = Number(birthMatch[2]);
+    month = Number(birthMatch[3]);
+    day = Number(birthMatch[4]);
+
+    if (/^(昭和|昭|S)$/i.test(eraStr)) year = 1925 + eraYear;
+    else if (/^(平成|平|H)$/i.test(eraStr)) year = 1988 + eraYear;
+    else if (/^(令和|令|R)$/i.test(eraStr)) year = 2018 + eraYear;
+    else if (/^(大正|T)$/i.test(eraStr)) year = 1911 + eraYear;
+    else if (/^(明治|M)$/i.test(eraStr)) year = 1867 + eraYear;
+  } else {
+    birthMatch = normalized.match(seirekiRegex);
+    if (birthMatch) {
+      year = Number(birthMatch[1]);
+      month = Number(birthMatch[2]);
+      day = Number(birthMatch[3]);
+    }
+  }
+
+  if (year && month && day && year > 1890 && month >= 1 && month <= 12 && day >= 1 && day <= 31) {
+    const formattedMonth = String(month).padStart(2, '0');
+    const formattedDay = String(day).padStart(2, '0');
+    const isoDate = `${year}-${formattedMonth}-${formattedDay}`;
+
+    document.getElementById("birthdate").value = isoDate;
+    onBirthdateChange();
+    detectedItems.push("生年月日");
+  }
+
+  /* --- B. 所得区分・限度区分の抽出 --- */
+  let matchedCategory = null;
+
+  let targetSection = "";
+  const limitMatch = normalized.match(/限\s*度\s*区\s*分[\s\S]*?(?=\n\r?|\r|特定|保険|発効|$)/);
+  
+  if (limitMatch) {
+    targetSection = limitMatch[0].replace(/\s+/g, "");
+  } else {
+    targetSection = normalized.replace(/\s+/g, "");
+  }
+
+  const ageCategory = document.getElementById("ageCategory").value;
+
+  if (/(区分|区)?(ア|A)/i.test(targetSection)) {
+    matchedCategory = "top";
+  } else if (/(区分|区)?(イ|B)/i.test(targetSection)) {
+    matchedCategory = "high";
+  } else if (/(区分|区)?(ウ|C)/i.test(targetSection)) {
+    matchedCategory = "middle";
+  } else if (/(区分|区)?(エ|D|Ⅱ|2|二)/i.test(targetSection)) {
+    matchedCategory = ageCategory === "under70" ? "low" : "low";
+  } else if (/(区分|区)?(オ|E|Ⅰ|1|一)/i.test(targetSection)) {
+    matchedCategory = "nonTax";
+  } else if (/現役並み/i.test(targetSection)) {
+    matchedCategory = "top";
+  }
+
+  if (matchedCategory) {
+    document.getElementById("category").value = matchedCategory;
+    detectedItems.push("所得区分");
+  }
+
+  /* --- 通知表示 --- */
+  const notice = document.getElementById("ocrNotice");
+  if (detectedItems.length > 0) {
+    notice.innerHTML = `✓ 画像から <strong>${detectedItems.join("・")}</strong> を読み取って入力フォームへ自動反映しました。誤りがないかご確認ください。`;
+    notice.style.display = "block";
+  } else {
+    notice.innerHTML = "⚠️ 画像から生年月日や区分を自動読み取りできませんでした。手入力でご設定ください。";
+    notice.style.display = "block";
+  }
+}
+
+/* =========================================================
+   5. 生年月日から年齢・年齢区分を自動計算する処理
+========================================================= */
+function onBirthdateChange() {
+  const birthdateVal = document.getElementById("birthdate").value;
+  if (!birthdateVal) {
+    document.getElementById("calculatedAge").value = "";
+    return;
+  }
+
+  const birthDate = new Date(birthdateVal);
+  const today = new Date();
+
+  let age = today.getFullYear() - birthDate.getFullYear();
+  const m = today.getMonth() - birthDate.getMonth();
+
+  if (m < 0 || (m === 0 && today.getDate() < birthDate.getDate())) {
+    age--;
+  }
+
+  if (age >= 0 && age <= 120) {
+    document.getElementById("calculatedAge").value = `${age} 歳`;
+
+    if (age < 70) {
+      document.getElementById("ageCategory").value = "under70";
+    } else {
+      document.getElementById("ageCategory").value = "over70";
+    }
+    updateAgeCategoryOptions();
+  } else {
+    document.getElementById("calculatedAge").value = "";
+  }
+}
+
+/* =========================================================
+   6. 年齢に応じた所得区分オプションの切り替え
+========================================================= */
+function updateAgeCategoryOptions() {
+  const ageCategory = document.getElementById("ageCategory").value;
+  const categorySelect = document.getElementById("category");
+  const treatmentTypeSelect = document.getElementById("treatmentType");
+
+  const currentVal = categorySelect.value;
+  categorySelect.innerHTML = "";
+
+  if (ageCategory === "under70") {
+    treatmentTypeSelect.disabled = true;
+    categorySelect.innerHTML = `
+      <option value="top">区分ア（年収約1,160万円〜）</option>
+      <option value="high">区分イ（年収約770万〜1,160万円）</option>
+      <option value="middle" selected>区分ウ（年収約370万〜770万円）</option>
+      <option value="low">区分エ（〜年収約370万円）</option>
+      <option value="nonTax">区分オ（住民税非課税者）</option>
+    `;
+  } else {
+    treatmentTypeSelect.disabled = false;
+    categorySelect.innerHTML = `
+      <option value="top">現役並みⅢ（標準報酬月額83万円以上）</option>
+      <option value="high">現役並みⅡ（標準報酬月額53万円以上）</option>
+      <option value="middle_high">現役並みⅠ（標準報酬月額28万円以上）</option>
+      <option value="middle" selected>一般（年収約156万〜370万円）</option>
+      <option value="low">低所得Ⅱ（区分Ⅱ / 住民税非課税世帯）</option>
+      <option value="nonTax">低所得Ⅰ（区分Ⅰ / 年金収入一定以下等）</option>
+    `;
+  }
+
+  if (currentVal && Array.from(categorySelect.options).some(o => o.value === currentVal)) {
+    categorySelect.value = currentVal;
+  }
+}
+
+/* =========================================================
+   7. 高額療養費計算（厚生労働省基準）
+========================================================= */
+function calculate() {
+  const ageCategory = document.getElementById("ageCategory").value;
+  const category = document.getElementById("category").value;
+  const cost = Number(document.getElementById("medicalCost").value);
+  const month = document.getElementById("treatmentMonth").value;
+  const multiple = document.getElementById("multiple").value;
+  const treatmentType = document.getElementById("treatmentType").value;
+
+  if (!month) {
+    alert("診療年月を選択してください。");
+    return;
+  }
+
+  if (!cost || cost <= 0) {
+    alert("医療費を入力してください。");
+    return;
+  }
+
+  let cap = 0;
+  let multipleCap = null;
+  let explanation = "";
+
+  /* --- 69歳以下 --- */
+  if (ageCategory === "under70") {
+    switch (category) {
+      case "top": // 区分ア
+        cap = 252600 + Math.max(0, cost - 842000) * 0.01;
+        multipleCap = 140100;
+        explanation = "70歳未満・区分ア（上位所得者）";
+        break;
+      case "high": // 区分イ
+        cap = 167400 + Math.max(0, cost - 558000) * 0.01;
+        multipleCap = 93000;
+        explanation = "70歳未満・区分イ";
+        break;
+      case "middle": // 区分ウ
+        cap = 80100 + Math.max(0, cost - 267000) * 0.01;
+        multipleCap = 44400;
+        explanation = "70歳未満・区分ウ（一般所得）";
+        break;
+      case "low": // 区分エ
+        cap = 57600;
+        multipleCap = 44400;
+        explanation = "70歳未満・区分エ";
+        break;
+      case "nonTax": // 区分オ
+        cap = 35400;
+        multipleCap = 24600;
+        explanation = "70歳未満・区分オ（低所得者）";
+        break;
+    }
+  } 
+  /* --- 70歳以上 --- */
+  else {
+    switch (category) {
+      case "top": // 現役並みⅢ
+        cap = 252600 + Math.max(0, cost - 842000) * 0.01;
+        multipleCap = 140100;
+        explanation = "70歳以上・現役並み所得Ⅲ";
+        break;
+      case "high": // 現役並みⅡ
+        cap = 167400 + Math.max(0, cost - 558000) * 0.01;
+        multipleCap = 93000;
+        explanation = "70歳以上・現役並み所得Ⅱ";
+        break;
+      case "middle_high": // 現役並みⅠ
+        cap = 80100 + Math.max(0, cost - 267000) * 0.01;
+        multipleCap = 44400;
+        explanation = "70歳以上・現役並み所得Ⅰ";
+        break;
+      case "middle": // 一般
+        if (treatmentType === "outpatient") {
+          cap = 18000;
+          explanation = "70歳以上・一般（外来個人上限）";
+        } else {
+          cap = 57600;
+          multipleCap = 44400;
+          explanation = "70歳以上・一般（世帯上限）";
+        }
+        break;
+      case "low": // 低所得Ⅱ
+        if (treatmentType === "outpatient") {
+          cap = 8000;
+          explanation = "70歳以上・低所得Ⅱ（外来個人上限）";
+        } else {
+          cap = 24600;
+          explanation = "70歳以上・低所得Ⅱ（世帯上限）";
+        }
+        break;
+      case "nonTax": // 低所得Ⅰ
+        if (treatmentType === "outpatient") {
+          cap = 8000;
+          explanation = "70歳以上・低所得Ⅰ（外来個人上限）";
+        } else {
+          cap = 15000;
+          explanation = "70歳以上・低所得Ⅰ（世帯上限）";
+        }
+        break;
+    }
+  }
+
+  // 多数回該当の適用
+  if (multiple === "3" && multipleCap !== null) {
+    cap = Math.min(cap, multipleCap);
+    explanation += "／多数回該当を適用";
+  }
+
+  cap = Math.floor(cap);
+
+  // 窓口負担割合の決定
+  let burdenRate = 0.30;
+  if (ageCategory === "over70") {
+    if (["top", "high", "middle_high"].includes(category)) {
+      burdenRate = 0.30;
+    } else if (category === "middle") {
+      burdenRate = 0.20; // 一般区分は原則2割（1割特例対象除く）
+    } else {
+      burdenRate = 0.10; // 低所得区分
+    }
+  }
+
+  const normalBurden = Math.floor(cost * burdenRate);
+  const actualCap = Math.min(cap, normalBurden);
+  const saved = Math.max(0, normalBurden - actualCap);
+
+  document.getElementById("result").style.display = "block";
+  document.getElementById("resultPrice").textContent = "約 " + actualCap.toLocaleString() + " 円";
+
+  document.getElementById("resultMessage").innerHTML = saved > 0
+    ? "通常の自己負担より<br><strong>" + saved.toLocaleString() + "円</strong> 軽くなる可能性があります"
+    : "通常の自己負担額が上限額を下回っています。";
+
+  let detail = "";
+  detail += "<p><strong>総医療費（10割）:</strong> " + cost.toLocaleString() + "円</p>";
+  detail += "<p><strong>通常の自己負担（" + Math.round(burdenRate * 10) + "割）:</strong> " + normalBurden.toLocaleString() + "円</p>";
+  detail += "<p><strong>高額療養費の上限額（目安）:</strong> " + cap.toLocaleString() + "円</p>";
+  detail += "<p class='small'>" + explanation + "</p>";
+
+  document.getElementById("calculationDetail").innerHTML = detail;
+  document.getElementById("result").scrollIntoView({ behavior: "smooth" });
+}
+
+/* =========================================================
+   8. デバッグ・初期化
+========================================================= */
+function toggleDebug() {
+  const debug = document.getElementById("debugText");
+  debug.style.display = debug.style.display === "block" ? "none" : "block";
 }
 </script>
 
