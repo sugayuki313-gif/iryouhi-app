@@ -509,15 +509,15 @@ async function runOCR(canvas) {
 
 
 /* =========================================================
-   4. OCR結果の解析・直接フォーム書き込み (和暦対応強化)
+   4. OCR結果の解析・直接フォーム書き込み（区分Ⅰ/Ⅱ・ローマ・アラビア数字対応）
 ========================================================= */
 
 function parseOCRResult(text) {
+  // 全角英数字・ローマ数字の正規化処理
   let normalized = text
     .replace(/[０-９]/g, s => String.fromCharCode(s.charCodeAt(0) - 0xfee0))
     .replace(/[Ａ-Ｚａ-ｚ]/g, s => String.fromCharCode(s.charCodeAt(0) - 0xfee0))
     .replace(/[ＯＯ〇]/g, "0")
-    .replace(/[Ｉl|I]/g, "1")
     .replace(/[元]/g, "1")
     .replace(/[一]/g, "1")
     .replace(/[二]/g, "2")
@@ -527,15 +527,15 @@ function parseOCRResult(text) {
     .replace(/[六]/g, "6")
     .replace(/[七]/g, "7")
     .replace(/[八]/g, "8")
-    .replace(/[九]/g, "9");
+    .replace(/[九]/g, "9")
+    // 区分表記に使われるローマ数字（Ⅰ, Ⅱ）をアラビア数字（1, 2）や標準表記に置換
+    .replace(/[Ⅰⅰ]/g, "1")
+    .replace(/[Ⅱⅱ]/g, "2");
 
   let detectedItems = [];
 
   /* --- A. 和暦・西暦双方に対応した生年月日抽出 --- */
-  // 1. 和暦パターン（明治/大正/昭和/平成/令和、略称 M/T/S/H/R、昭/平/令など）
   const warekiRegex = /(明治|大正|昭和|平成|令和|昭|平|令|[MTSHR])\s*(\d{1,2})\s*年?\s*(\d{1,2})\s*月?\s*(\d{1,2})\s*日?/;
-  
-  // 2. 西暦パターン（例：1980年5月12日、2005.01.20など）
   const seirekiRegex = /(19\d{2}|20\d{2})\s*年?\s*(\d{1,2})\s*月?\s*(\d{1,2})\s*日?/;
 
   let birthMatch = normalized.match(warekiRegex);
@@ -553,7 +553,6 @@ function parseOCRResult(text) {
     else if (/^(大正|T)$/i.test(eraStr)) year = 1911 + eraYear;
     else if (/^(明治|M)$/i.test(eraStr)) year = 1867 + eraYear;
   } else {
-    // 和暦にヒットしなければ西暦で判定
     birthMatch = normalized.match(seirekiRegex);
     if (birthMatch) {
       year = Number(birthMatch[1]);
@@ -562,27 +561,34 @@ function parseOCRResult(text) {
     }
   }
 
-  // 抽出値のバリデーションと反映
   if (year && month && day && year > 1890 && month >= 1 && month <= 12 && day >= 1 && day <= 31) {
     const formattedMonth = String(month).padStart(2, '0');
     const formattedDay = String(day).padStart(2, '0');
     const isoDate = `${year}-${formattedMonth}-${formattedDay}`;
 
     document.getElementById("birthdate").value = isoDate;
-    onBirthdateChange(); // 年齢および年齢区分を即時反映
+    onBirthdateChange();
     detectedItems.push("生年月日");
   }
 
-  /* --- B. 所得区分・限度区分の抽出・反映 --- */
+  /* --- B. 所得区分・限度区分の抽出・反映（区分Ⅰ・Ⅱ・1・2・オ・エ等に対応） --- */
   let matchedCategory = null;
-  if (/区分\s*[:：]?\s*[アA]|現役並み/.test(normalized)) {
-    matchedCategory = "high";
-  } else if (/区分\s*[:：]?\s*[イBウC]/.test(normalized)) {
-    matchedCategory = "middle";
-  } else if (/区分\s*[:：]?\s*[エE]|区\s*[ⅡII2]/.test(normalized)) {
+
+  // 1. 低所得 / 区分Ⅱ (ローマ数字Ⅱ、アラビア数字2、英字II、区分エ 等)
+  if (/(?:区分|限度額|適用)?\s*[:：]?\s*(?:Ⅱ|2|II|エ|E)\b/i.test(normalized) || /区分\s*2/i.test(normalized)) {
     matchedCategory = "low";
-  } else if (/区分\s*[:：]?\s*[オO]|区\s*[ⅠI1]/.test(normalized)) {
+  }
+  // 2. 住民税非課税 / 区分Ⅰ (ローマ数字Ⅰ、アラビア数字1、英字I、区分オ 等)
+  else if (/(?:区分|限度額|適用)?\s*[:：]?\s*(?:Ⅰ|1|I|オ|O)\b/i.test(normalized) || /区分\s*1/i.test(normalized)) {
     matchedCategory = "nonTax";
+  }
+  // 3. 高所得・現役並み (区分ア、区分A、現役並み)
+  else if (/(?:区分|限度額)?\s*[:：]?\s*(?:ア|A)\b/i.test(normalized) || /現役並み/.test(normalized)) {
+    matchedCategory = "high";
+  }
+  // 4. 一般所得 (区分イ、区分B、区分ウ、区分C)
+  else if (/(?:区分|限度額)?\s*[:：]?\s*(?:イ|B|ウ|C)\b/i.test(normalized)) {
+    matchedCategory = "middle";
   }
 
   if (matchedCategory) {
@@ -626,7 +632,6 @@ function onBirthdateChange() {
   if (age >= 0 && age <= 120) {
     document.getElementById("calculatedAge").value = `${age} 歳`;
 
-    // 年齢区分の自動判定
     if (age < 70) {
       document.getElementById("ageCategory").value = "under70";
     } else if (age < 75) {
@@ -754,13 +759,11 @@ function calculate() {
     return;
   }
 
-  // 多数回該当の適用
   if (multiple === "3" && multipleCap) {
     cap = Math.min(cap, multipleCap);
     explanation += "／多数回該当を適用";
   }
 
-  // 本来の窓口負担（割合）
   let burdenRate = ageCategory === "under70" ? 0.30 : 0.20;
   if (ageCategory !== "under70" && category === "high") {
     burdenRate = 0.30;
@@ -772,7 +775,6 @@ function calculate() {
   const actualCap = Math.min(cap, normalBurden);
   const saved = Math.max(0, normalBurden - actualCap);
 
-  // 結果描画
   document.getElementById("result").style.display = "block";
   document.getElementById("resultPrice").textContent = "約 " + Math.round(actualCap).toLocaleString() + " 円";
 
