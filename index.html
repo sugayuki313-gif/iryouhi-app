@@ -120,6 +120,12 @@ button {
   color: #075ca8;
 }
 
+.clear-btn {
+  background: #f8d7da;
+  color: #721c24;
+  border: 1px solid #f5c6cb;
+}
+
 .warning {
   background: #fff6df;
   border-left: 5px solid #e3a400;
@@ -311,6 +317,14 @@ hr {
       style="display:none; background:#fff3cd; color:#856404; border:1px solid #ffeeba;"
       onclick="reparseOCR()">
       🔄 解析結果から自動入力し直す
+    </button>
+
+    <button
+      id="clearBtn"
+      class="clear-btn"
+      style="display:none;"
+      onclick="clearInsuranceInfo()">
+      🗑️ 読み取り情報をクリア
     </button>
 
     <img id="preview" alt="撮影画像">
@@ -673,6 +687,7 @@ async function runOCR(canvas) {
 
   if (lastOCRText.trim().length > 0) {
     document.getElementById("reparseBtn").style.display = "block";
+    document.getElementById("clearBtn").style.display = "block";
   }
 }
 
@@ -778,6 +793,37 @@ function reparseOCR() {
     return;
   }
   parseOCRResult(lastOCRText);
+}
+
+/* 読み取り情報・入力値のクリア処理 */
+function clearInsuranceInfo() {
+  // 1. ファイル入力・プレビュー画像の初期化
+  document.getElementById("cameraInput").value = "";
+  document.getElementById("fileInput").value = "";
+
+  const preview = document.getElementById("preview");
+  preview.src = "";
+  preview.style.display = "none";
+
+  // 2. OCR解析結果テキスト・メッセージ等の消去
+  lastOCRText = "";
+  document.getElementById("ocrProgress").textContent = "";
+
+  const notice = document.getElementById("ocrNotice");
+  notice.style.display = "none";
+  notice.innerHTML = "";
+
+  document.getElementById("debugText").textContent = "";
+
+  // 3. ボタン表示の制御
+  document.getElementById("reparseBtn").style.display = "none";
+  document.getElementById("clearBtn").style.display = "none";
+
+  // 4. 生年月日・年齢初期化（デフォルト: 昭和25年1月1日）
+  initWarekiSelects();
+
+  // 5. 計算結果表示の非表示化
+  document.getElementById("result").style.display = "none";
 }
 
 
@@ -986,7 +1032,6 @@ function calculate() {
     }
   }
 
-  // 多数回該当の適用判断
   if (multiple === "3" && multipleCap !== null) {
     cap = Math.min(cap, multipleCap);
     baseFormula += ` ➔ 多数回該当適用で定額 【${multipleCap.toLocaleString()}円】`;
@@ -1022,11 +1067,9 @@ function calculate() {
     ? "通常の自己負担額より<br><strong>" + Math.round(saved).toLocaleString() + "円</strong> 軽くなる可能性があります"
     : "通常の自己負担額が上限額を下回っています。";
 
-  // ベース計算式のセット
   document.getElementById("baseFormulaText").textContent = baseFormula;
   document.getElementById("formulaNote").textContent = formulaNote;
 
-  // 内訳・計算プロセスの組み立て
   let detail = "";
   detail += "<p><strong>想定医療費（10割総額）:</strong> " + cost.toLocaleString() + "円</p>";
   detail += "<p><strong>窓口負担目安（" + Math.round(burdenRate * 10) + "割）:</strong> " + cost.toLocaleString() + "円 × " + burdenRate + " = " + normalBurden.toLocaleString() + "円</p>";
