@@ -269,7 +269,7 @@ hr {
 </div>
 
 
-<!-- STEP 2: 条件入力（一本化したメインフォーム） -->
+<!-- STEP 2: 条件入力 -->
 <div class="card">
   <div class="step">② 医療費・患者情報について入力</div>
 
@@ -509,32 +509,19 @@ async function runOCR(canvas) {
 
 
 /* =========================================================
-   4. OCR結果の解析・直接フォーム書き込み（区分Ⅰ/Ⅱ・ローマ・アラビア数字対応）
+   4. OCR結果の解析・直接フォーム書き込み
 ========================================================= */
 
 function parseOCRResult(text) {
-  // 全角英数字・ローマ数字の正規化処理
+  // 全角英数字の半角化および大文字化（改行・スペースは保持）
   let normalized = text
     .replace(/[０-９]/g, s => String.fromCharCode(s.charCodeAt(0) - 0xfee0))
     .replace(/[Ａ-Ｚａ-ｚ]/g, s => String.fromCharCode(s.charCodeAt(0) - 0xfee0))
-    .replace(/[ＯＯ〇]/g, "0")
-    .replace(/[元]/g, "1")
-    .replace(/[一]/g, "1")
-    .replace(/[二]/g, "2")
-    .replace(/[三]/g, "3")
-    .replace(/[四]/g, "4")
-    .replace(/[五]/g, "5")
-    .replace(/[六]/g, "6")
-    .replace(/[七]/g, "7")
-    .replace(/[八]/g, "8")
-    .replace(/[九]/g, "9")
-    // 区分表記に使われるローマ数字（Ⅰ, Ⅱ）をアラビア数字（1, 2）や標準表記に置換
-    .replace(/[Ⅰⅰ]/g, "1")
-    .replace(/[Ⅱⅱ]/g, "2");
+    .toUpperCase();
 
   let detectedItems = [];
 
-  /* --- A. 和暦・西暦双方に対応した生年月日抽出 --- */
+  /* --- A. 生年月日抽出 --- */
   const warekiRegex = /(明治|大正|昭和|平成|令和|昭|平|令|[MTSHR])\s*(\d{1,2})\s*年?\s*(\d{1,2})\s*月?\s*(\d{1,2})\s*日?/;
   const seirekiRegex = /(19\d{2}|20\d{2})\s*年?\s*(\d{1,2})\s*月?\s*(\d{1,2})\s*日?/;
 
@@ -571,23 +558,34 @@ function parseOCRResult(text) {
     detectedItems.push("生年月日");
   }
 
-  /* --- B. 所得区分・限度区分の抽出・反映（区分Ⅰ・Ⅱ・1・2・オ・エ等に対応） --- */
+  /* --- B. 所得区分・限度区分の抽出 --- */
   let matchedCategory = null;
 
-  // 1. 低所得 / 区分Ⅱ (ローマ数字Ⅱ、アラビア数字2、英字II、区分エ 等)
-  if (/(?:区分|限度額|適用)?\s*[:：]?\s*(?:Ⅱ|2|II|エ|E)\b/i.test(normalized) || /区分\s*2/i.test(normalized)) {
-    matchedCategory = "low";
+  // 「限度 区分」などのキーワードを含む部分を切り出し、後続のノイズ（特定疾病区分等）をカット
+  let targetSection = "";
+  const limitMatch = normalized.match(/限\s*度\s*区\s*分[\s\S]*?(?=\n\r?|\r|特定|保険|発効|$)/);
+  
+  if (limitMatch) {
+    targetSection = limitMatch[0].replace(/\s+/g, ""); // 該当範囲のスペースを除去
+  } else {
+    // 明確な「限度区分」の文字が見つからない場合は全体からスペースを除去して判定
+    targetSection = normalized.replace(/\s+/g, "");
   }
-  // 2. 住民税非課税 / 区分Ⅰ (ローマ数字Ⅰ、アラビア数字1、英字I、区分オ 等)
-  else if (/(?:区分|限度額|適用)?\s*[:：]?\s*(?:Ⅰ|1|I|オ|O)\b/i.test(normalized) || /区分\s*1/i.test(normalized)) {
-    matchedCategory = "nonTax";
+
+  // 1. 区分Ⅱ (Ⅱ, 2, II, 11, ll, ||, 二, エ)
+  if (/(区分|区)?(Ⅱ|2|II|11|LL|\|\||二|エ)/i.test(targetSection)) {
+    matchedCategory = "low"; // 低所得（区分Ⅱ）
   }
-  // 3. 高所得・現役並み (区分ア、区分A、現役並み)
-  else if (/(?:区分|限度額)?\s*[:：]?\s*(?:ア|A)\b/i.test(normalized) || /現役並み/.test(normalized)) {
+  // 2. 区分Ⅰ (Ⅰ, 1, I, l, |, 一, オ)
+  else if (/(区分|区)?(Ⅰ|1|I|L|\||一|オ)/i.test(targetSection)) {
+    matchedCategory = "nonTax"; // 住民税非課税（区分Ⅰ）
+  }
+  // 3. 現役並み / 区分ア / 区分A
+  else if (/(区分|区)?(ア|A)|現役並み/i.test(targetSection)) {
     matchedCategory = "high";
   }
-  // 4. 一般所得 (区分イ、区分B、区分ウ、区分C)
-  else if (/(?:区分|限度額)?\s*[:：]?\s*(?:イ|B|ウ|C)\b/i.test(normalized)) {
+  // 4. 一般 / 区分イ・ウ・B・C
+  else if (/(区分|区)?(イ|B|ウ|C)/i.test(targetSection)) {
     matchedCategory = "middle";
   }
 
