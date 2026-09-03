@@ -34,7 +34,6 @@ button { width: 100%; border: 0; border-radius: 12px; padding: 15px; font-size: 
 .formula-box { background: #ffffff; border: 1px solid #bcd8f3; border-radius: 8px; padding: 12px; margin: 12px 0; font-size: .9rem; }
 .formula-code { font-family: monospace; background: #f4f4f4; padding: 4px 8px; border-radius: 4px; display: block; margin: 6px 0; word-break: break-all; }
 .yearly-info { background: #fff8e1; border: 1px solid #ffe082; border-radius: 8px; padding: 12px; margin-top: 10px; font-size: .88rem; color: #5d4037; }
-.small { font-size: .78rem; color: #666; }
 .warning { background: #fff6df; border-left: 5px solid #e3a400; padding: 14px; border-radius: 8px; margin-top: 15px; }
 #debugText { white-space: pre-wrap; word-break: break-word; font-size: .75rem; background: #222; color: #eee; padding: 10px; border-radius: 8px; max-height: 220px; overflow: auto; display: none; }
 .hidden { display: none !important; }
@@ -76,6 +75,7 @@ hr { border: 0; border-top: 1px solid #ddd; margin: 20px 0; }
     <label>生年月日（和暦）</label>
     <div class="wareki-group">
       <select id="birthEra" onchange="onBirthdateChange()" style="flex: 2.2;">
+        <option value="">選択してください</option>
         <option value="S">昭和</option>
         <option value="H">平成</option>
         <option value="R">令和</option>
@@ -106,12 +106,12 @@ hr { border: 0; border-top: 1px solid #ddd; margin: 20px 0; }
     <input id="treatmentMonth" type="month" value="2026-08">
 
     <label for="medicalCost">想定の医療費総額（10割）</label>
-    <input id="medicalCost" type="number" min="0" step="1000" value="1000000" placeholder="例：1000000">
+    <input id="medicalCost" type="number" min="0" step="1000" value="" placeholder="例：1000000（金額を入力してください）">
 
     <label for="treatmentType" id="treatmentTypeLabel">診療タイプ（70歳以上のみ選択）</label>
     <select id="treatmentType">
+      <option value="outpatient" selected>外来のみ（個人単位上限）</option>
       <option value="combined">入院＋外来（世帯上限）</option>
-      <option value="outpatient">外来のみ（個人単位上限）</option>
     </select>
 
     <label for="multiple">過去12か月以内に高額療養費に該当した月</label>
@@ -167,7 +167,10 @@ function initWarekiSelects() {
   const yearSelect = document.getElementById("birthYear");
   const monthSelect = document.getElementById("birthMonth");
   const daySelect = document.getElementById("birthDay");
-  yearSelect.innerHTML = ""; monthSelect.innerHTML = ""; daySelect.innerHTML = "";
+  
+  yearSelect.innerHTML = '<option value="">年</option>';
+  monthSelect.innerHTML = '<option value="">月</option>';
+  daySelect.innerHTML = '<option value="">日</option>';
 
   for (let y = 1; y <= 64; y++) {
     const opt = document.createElement("option");
@@ -184,9 +187,8 @@ function initWarekiSelects() {
     opt.value = d; opt.textContent = d + "日";
     daySelect.appendChild(opt);
   }
-  document.getElementById("birthEra").value = "S";
-  yearSelect.value = 25; monthSelect.value = 1; daySelect.value = 1;
-  onBirthdateChange();
+  document.getElementById("birthEra").value = "";
+  document.getElementById("calculatedAge").value = "";
 }
 
 function convertWarekiToSeireki(era, year) {
@@ -203,6 +205,11 @@ function onBirthdateChange() {
   const year = document.getElementById("birthYear").value;
   const month = document.getElementById("birthMonth").value;
   const day = document.getElementById("birthDay").value;
+
+  if (!era || !year || !month || !day) {
+    document.getElementById("calculatedAge").value = "";
+    return;
+  }
 
   const seirekiYear = convertWarekiToSeireki(era, year);
   if (!seirekiYear) return;
@@ -321,10 +328,16 @@ function clearInsuranceInfo() {
 
 function calculate() {
   if (!masterRules) return;
+  const costInput = document.getElementById("medicalCost").value;
+  if (!costInput || Number(costInput) <= 0) {
+    alert("想定の医療費総額（10割）を入力してください。");
+    return;
+  }
+
   const month = document.getElementById("treatmentMonth").value;
   const ageCat = document.getElementById("ageCategory").value;
   const cat = document.getElementById("category").value;
-  const cost = Number(document.getElementById("medicalCost").value);
+  const cost = Number(costInput);
   const isMultiple = document.getElementById("multiple").value === "3";
   const isOutpatient = document.getElementById("treatmentType").value === "outpatient";
 
