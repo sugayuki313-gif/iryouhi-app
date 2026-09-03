@@ -28,6 +28,7 @@ button { width: 100%; border: 0; border-radius: 12px; padding: 15px; font-size: 
 .ocr-area { border: 2px dashed #aaa; border-radius: 12px; padding: 18px; text-align: center; margin-top: 10px; }
 #preview { max-width: 100%; max-height: 360px; margin-top: 15px; border-radius: 10px; display: none; }
 .progress { margin-top: 12px; font-size: .9rem; color: #555; font-weight: bold; }
+.ocr-result-box { background: #f0f7ff; border: 1px solid #b3d7ff; border-radius: 10px; padding: 12px; margin-top: 14px; }
 .result { display: none; background: #eef7ff; border-left: 6px solid #075ca8; padding: 18px; border-radius: 10px; margin-top: 20px; }
 .result-price { text-align: center; font-size: 2rem; font-weight: bold; color: #c62828; margin: 8px 0; }
 .big-message { font-size: 1.05rem; font-weight: bold; text-align: center; }
@@ -72,6 +73,22 @@ hr { border: 0; border-top: 1px solid #ddd; margin: 20px 0; }
   <!-- STEP 2 -->
   <div class="card">
     <div class="step">② 医療費・患者情報について入力</div>
+
+    <!-- OCR読み取り確認表示窓 -->
+    <div class="ocr-result-box">
+      <div style="font-size: 0.9rem; font-weight: bold; color: #075ca8; margin-bottom: 6px;">📷 OCR読み取り結果（確認・修正用）</div>
+      <div style="display: flex; gap: 10px;">
+        <div style="flex: 1;">
+          <label style="margin-top: 0; font-size: 0.85rem;" for="ocrRatio">負担割合</label>
+          <input id="ocrRatio" type="text" placeholder="例: 3割" oninput="updateCategoryFromOCRInputs()">
+        </div>
+        <div style="flex: 1;">
+          <label style="margin-top: 0; font-size: 0.85rem;" for="ocrCategory">限度額区分</label>
+          <input id="ocrCategory" type="text" placeholder="例: 区分ウ" oninput="updateCategoryFromOCRInputs()">
+        </div>
+      </div>
+    </div>
+
     <label>生年月日（和暦）</label>
     <div class="wareki-group">
       <select id="birthEra" onchange="onBirthdateChange()" style="flex: 2.2;">
@@ -98,7 +115,7 @@ hr { border: 0; border-top: 1px solid #ddd; margin: 20px 0; }
       <option value="over75">75歳以上</option>
     </select>
 
-    <label for="category">所得区分・限度区分</label>
+    <label for="category">所得区分・限度区分（自動選択）</label>
     <select id="category">
       <option value="">年齢区分を先に選択してください</option>
     </select>
@@ -270,6 +287,8 @@ function updateAgeUI() {
     type.disabled = false;
     typeLabel.style.opacity = "1.0";
   }
+
+  updateCategoryFromOCRInputs();
 }
 
 async function handleImageFile(file) {
@@ -375,56 +394,75 @@ function parseOCRResult(text) {
     document.getElementById("birthYear").value = bestMatch.yearNum;
     document.getElementById("birthMonth").value = bestMatch.monthNum;
     document.getElementById("birthDay").value = bestMatch.dayNum;
-    onBirthdateChange(); // 年齢区分およびUIが更新される
+    onBirthdateChange();
   }
 
-  // 2. 限度額区分・負担割合の高度解析
-  parseCategoryAndRatio(normalized);
+  // 2. 負担割合と区分記号のテキスト抽出＆表示窓へのセット
+  extractRatioAndCategoryStrings(normalized);
 }
 
-function parseCategoryAndRatio(text) {
+function extractRatioAndCategoryStrings(text) {
+  let ratioText = "";
+  let catText = "";
+
+  // 負担割合の抽出
+  if (/1割|１割/.test(text)) ratioText = "1割";
+  else if (/2割|２割/.test(text)) ratioText = "2割";
+  else if (/3割|３割/.test(text)) ratioText = "3割";
+
+  // 限度額区分の抽出
+  if (/区分\s*[：:\s]*ア|区分ア|[\(（]ア[\)）]/i.test(text)) catText = "区分ア";
+  else if (/区分\s*[：:\s]*イ|区分イ|[\(（]イ[\)）]/i.test(text)) catText = "区分イ";
+  else if (/区分\s*[：:\s]*ウ|区分ウ|[\(（]ウ[\)）]/i.test(text)) catText = "区分ウ";
+  else if (/区分\s*[：:\s]*エ|区分エ|[\(（]エ[\)）]/i.test(text)) catText = "区分エ";
+  else if (/区分\s*[：:\s]*オ|区分オ|[\(（]オ[\)）]/i.test(text)) catText = "区分オ";
+  else if (/現役並み所得者Ⅲ|現役Ⅲ|区分Ⅲ/i.test(text)) catText = "現役並みⅢ";
+  else if (/現役並み所得者Ⅱ|現役Ⅱ|区分Ⅱ/i.test(text)) catText = "現役並みⅡ";
+  else if (/現役並み所得者Ⅰ|現役Ⅰ|区分Ⅰ/i.test(text)) catText = "現役並みⅠ";
+  else if (/低所得者Ⅱ|低所得Ⅱ/i.test(text)) catText = "低所得Ⅱ";
+  else if (/低所得者Ⅰ|低所得Ⅰ/i.test(text)) catText = "低所得Ⅰ";
+  else if (/一般/.test(text)) catText = "一般";
+
+  document.getElementById("ocrRatio").value = ratioText;
+  document.getElementById("ocrCategory").value = catText;
+
+  updateCategoryFromOCRInputs();
+}
+
+function updateCategoryFromOCRInputs() {
   const ageCat = document.getElementById("ageCategory").value;
   if (!ageCat) return;
 
+  const ratioVal = document.getElementById("ocrRatio").value;
+  const catVal = document.getElementById("ocrCategory").value;
   const categorySelect = document.getElementById("category");
   let targetCategory = "";
 
   if (ageCat === "under70") {
-    // 70歳未満の判定（適用区分の記号記号を最優先検出）
-    if (/区分\s*[：:\s]*ア|限度額適用区分\s*[：:\s]*ア|[\(（]ア[\)）]/i.test(text)) targetCategory = "A";
-    else if (/区分\s*[：:\s]*イ|限度額適用区分\s*[：:\s]*イ|[\(（]イ[\)）]/i.test(text)) targetCategory = "B";
-    else if (/区分\s*[：:\s]*ウ|限度額適用区分\s*[：:\s]*ウ|[\(（]ウ[\)）]/i.test(text)) targetCategory = "C";
-    else if (/区分\s*[：:\s]*エ|限度額適用区分\s*[：:\s]*エ|[\(（]エ[\)）]/i.test(text)) targetCategory = "D";
-    else if (/区分\s*[：:\s]*オ|限度額適用区分\s*[：:\s]*オ|[\(（]オ[\)）]/i.test(text)) targetCategory = "E";
-    else {
-      // 70歳未満で明確な記号がない場合は一般的な「ウ（標準所得）」をデフォルト候補とする
-      targetCategory = "C";
-    }
+    if (/ア/i.test(catVal)) targetCategory = "A";
+    else if (/イ/i.test(catVal)) targetCategory = "B";
+    else if (/ウ/i.test(catVal)) targetCategory = "C";
+    else if (/エ/i.test(catVal)) targetCategory = "D";
+    else if (/オ/i.test(catVal)) targetCategory = "E";
+    else if (catVal || ratioVal) targetCategory = "C"; // 未指定・標準は区分ウ
   } else {
-    // 70歳以上の判定（限度額区分＋負担割合の組み合わせ）
-    if (/現役並み所得者Ⅲ|現役Ⅲ|区分Ⅲ|現役並み3/i.test(text)) {
-      targetCategory = "active3";
-    } else if (/現役並み所得者Ⅱ|現役Ⅱ|区分Ⅱ|現役並み2/i.test(text)) {
-      targetCategory = "active2";
-    } else if (/現役並み所得者Ⅰ|現役Ⅰ|区分Ⅰ|現役並み1/i.test(text)) {
-      targetCategory = "active1";
-    } else if (/低所得者Ⅱ|低所得Ⅱ/i.test(text)) {
-      targetCategory = "low2";
-    } else if (/低所得者Ⅰ|低所得Ⅰ/i.test(text)) {
-      targetCategory = "low1";
-    } else if (/3割|３割/i.test(text)) {
-      // 3割で細分化記号がない場合は仮に「現役並みⅠ」をセット
-      targetCategory = "active1";
-    } else if (/2割|２割|1割|１割|一般/i.test(text)) {
-      // 1割・2割表記は「一般」
-      targetCategory = "general";
-    }
+    if (/現役.*Ⅲ|Ⅲ/i.test(catVal)) targetCategory = "active3";
+    else if (/現役.*Ⅱ|Ⅱ/i.test(catVal)) targetCategory = "active2";
+    else if (/現役.*Ⅰ|Ⅰ/i.test(catVal)) targetCategory = "active1";
+    else if (/低所得.*Ⅱ/i.test(catVal)) targetCategory = "low2";
+    else if (/低所得.*Ⅰ/i.test(catVal)) targetCategory = "low1";
+    else if (/一般/i.test(catVal)) targetCategory = "general";
+    else if (/3割/i.test(ratioVal)) targetCategory = "active1";
+    else if (/1割|2割/i.test(ratioVal)) targetCategory = "general";
   }
 
-  // 検出された区分をセレクトボックスに反映
   if (targetCategory && categorySelect.querySelector(`option[value="${targetCategory}"]`)) {
     categorySelect.value = targetCategory;
   }
+}
+
+function reparseOCR() {
+  if (lastOCRText) parseOCRResult(lastOCRText);
 }
 
 function clearInsuranceInfo() {
@@ -432,6 +470,8 @@ function clearInsuranceInfo() {
   document.getElementById("debugText").textContent = "";
   document.getElementById("reparseBtn").style.display = "none";
   document.getElementById("clearBtn").style.display = "none";
+  document.getElementById("ocrRatio").value = "";
+  document.getElementById("ocrCategory").value = "";
   initWarekiSelects();
   document.getElementById("ageCategory").value = "";
   updateAgeUI();
