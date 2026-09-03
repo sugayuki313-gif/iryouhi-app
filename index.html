@@ -56,7 +56,7 @@ hr { border: 0; border-top: 1px solid #ddd; margin: 20px 0; }
   <!-- STEP 1 -->
   <div class="card">
     <div class="step">① 保険資格情報を撮影（任意）</div>
-    <div class="help">保険証・資格確認書などの写真を撮影すると生年月日が自動入力されます。</div>
+    <div class="help">保険証・資格確認書などの写真を撮影すると生年月日・負担割合・適用区分が自動読み取りされます。</div>
     <div class="ocr-area">
       <input id="cameraInput" type="file" accept="image/*" capture="environment" class="hidden">
       <input id="fileInput" type="file" accept="image/*" class="hidden">
@@ -322,27 +322,22 @@ async function runOCR(canvas) {
 }
 
 function parseOCRResult(text) {
-  // 全角数字を半角数字に変換、スペース整理
   let normalized = text.replace(/[０-９]/g, s => String.fromCharCode(s.charCodeAt(0) - 0xfee0)).replace(/\s+/g, ' ');
 
-  // 和暦日付パターン
+  // 1. 生年月日の解析
   const warekiRegex = /(明治|大正|昭和|平成|令和|昭|平|令|[MTSHR])\s*(\d{1,2})\s*年\s*(\d{1,2})\s*月\s*(\d{1,2})\s*日?/g;
-
   const ignoreKeywords = ["交付", "発行", "有効", "取得", "経過", "認定", "作成"];
   const birthKeywords = ["生年月日", "生年", "生", "誕"];
 
   let bestMatch = null;
   let highestScore = -1;
-
   let match;
+
   while ((match = warekiRegex.exec(normalized)) !== null) {
     const fullMatchIndex = match.index;
     const prefixText = normalized.substring(Math.max(0, fullMatchIndex - 15), fullMatchIndex);
 
-    // 除外キーワードが直前にある場合はスキップ
-    if (ignoreKeywords.some(kw => prefixText.includes(kw))) {
-      continue;
-    }
+    if (ignoreKeywords.some(kw => prefixText.includes(kw))) continue;
 
     let eraStr = match[1];
     let yearNum = Number(match[2]);
@@ -355,7 +350,6 @@ function parseOCRResult(text) {
     else if (/大正|T/.test(eraStr)) eraCode = "T";
     else if (/明治|M/.test(eraStr)) eraCode = "M";
 
-    // 西暦・年齢計算による妥当性テスト
     const seirekiYear = convertWarekiToSeireki(eraCode, yearNum);
     if (!seirekiYear) continue;
 
@@ -365,14 +359,10 @@ function parseOCRResult(text) {
     const m = today.getMonth() - birthDate.getMonth();
     if (m < 0 || (m === 0 && today.getDate() < birthDate.getDate())) age--;
 
-    // 0歳〜115歳でなければ不正な日付として無視（交付年月日等の未来や最近の日付を除外）
     if (age < 0 || age > 115) continue;
 
     let score = 1;
-    // 「生年月日」「生」などのキーワードが近くにあればスコアを上げる
-    if (birthKeywords.some(kw => prefixText.includes(kw))) {
-      score += 10;
-    }
+    if (birthKeywords.some(kw => prefixText.includes(kw))) score += 10;
 
     if (score > highestScore) {
       highestScore = score;
@@ -385,9 +375,55 @@ function parseOCRResult(text) {
     document.getElementById("birthYear").value = bestMatch.yearNum;
     document.getElementById("birthMonth").value = bestMatch.monthNum;
     document.getElementById("birthDay").value = bestMatch.dayNum;
-    onBirthdateChange();
+    onBirthdateChange(); // 年齢区分およびUIが更新される
+  }
+
+  // 2. 限度額区分・負担割合の高度解析
+  parseCategoryAndRatio(normalized);
+}
+
+function parseCategoryAndRatio(text) {
+  const ageCat = document.getElementById("ageCategory").value;
+  if (!ageCat) return;
+
+  const categorySelect = document.getElementById("category");
+  let targetCategory = "";
+
+  if (ageCat === "under70") {
+    // 70歳未満の判定（適用区分の記号記号を最優先検出）
+    if (/区分\s*[：:\s]*ア|限度額適用区分\s*[：:\s]*ア|[\(（]ア[\)）]/i.test(text)) targetCategory = "A";
+    else if (/区分\s*[：:\s]*イ|限度額適用区分\s*[：:\s]*イ|[\(（]イ[\)）]/i.test(text)) targetCategory = "B";
+    else if (/区分\s*[：:\s]*ウ|限度額適用区分\s*[：:\s]*ウ|[\(（]ウ[\)）]/i.test(text)) targetCategory = "C";
+    else if (/区分\s*[：:\s]*エ|限度額適用区分\s*[：:\s]*エ|[\(（]エ[\)）]/i.test(text)) targetCategory = "D";
+    else if (/区分\s*[：:\s]*オ|限度額適用区分\s*[：:\s]*オ|[\(（]オ[\)）]/i.test(text)) targetCategory = "E";
+    else {
+      // 70歳未満で明確な記号がない場合は一般的な「ウ（標準所得）」をデフォルト候補とする
+      targetCategory = "C";
+    }
   } else {
-    alert("生年月日の判定に失敗しました。手動でご入力ください。");
+    // 70歳以上の判定（限度額区分＋負担割合の組み合わせ）
+    if (/現役並み所得者Ⅲ|現役Ⅲ|区分Ⅲ|現役並み3/i.test(text)) {
+      targetCategory = "active3";
+    } else if (/現役並み所得者Ⅱ|現役Ⅱ|区分Ⅱ|現役並み2/i.test(text)) {
+      targetCategory = "active2";
+    } else if (/現役並み所得者Ⅰ|現役Ⅰ|区分Ⅰ|現役並み1/i.test(text)) {
+      targetCategory = "active1";
+    } else if (/低所得者Ⅱ|低所得Ⅱ/i.test(text)) {
+      targetCategory = "low2";
+    } else if (/低所得者Ⅰ|低所得Ⅰ/i.test(text)) {
+      targetCategory = "low1";
+    } else if (/3割|３割/i.test(text)) {
+      // 3割で細分化記号がない場合は仮に「現役並みⅠ」をセット
+      targetCategory = "active1";
+    } else if (/2割|２割|1割|１割|一般/i.test(text)) {
+      // 1割・2割表記は「一般」
+      targetCategory = "general";
+    }
+  }
+
+  // 検出された区分をセレクトボックスに反映
+  if (targetCategory && categorySelect.querySelector(`option[value="${targetCategory}"]`)) {
+    categorySelect.value = targetCategory;
   }
 }
 
