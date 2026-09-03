@@ -308,15 +308,34 @@ async function handleImageFile(file) {
   }
 }
 
+// Canvasを使った画像前処理（二値化・ノイズ軽減）
 function preprocessImage(file) {
   return new Promise((resolve, reject) => {
     const img = new Image();
     const url = URL.createObjectURL(file);
     img.onload = () => {
       const canvas = document.createElement("canvas");
-      canvas.width = img.naturalWidth; canvas.height = img.naturalHeight;
+      canvas.width = img.naturalWidth;
+      canvas.height = img.naturalHeight;
       const ctx = canvas.getContext("2d");
+      
       ctx.drawImage(img, 0, 0);
+      
+      const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      const data = imageData.data;
+      
+      // 白黒（二値化）処理
+      for (let i = 0; i < data.length; i += 4) {
+        const avg = 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
+        const threshold = 130; // 背景色・薄い罫線を飛ばす閾値
+        const v = avg > threshold ? 255 : 0;
+        
+        data[i]     = v;
+        data[i + 1] = v;
+        data[i + 2] = v;
+      }
+      
+      ctx.putImageData(imageData, 0, 0);
       URL.revokeObjectURL(url);
       resolve(canvas);
     };
@@ -366,7 +385,7 @@ function parseOCRResult(text) {
     let eraCode = "S";
     if (/平成|平|H/.test(eraStr)) eraCode = "H";
     else if (/令和|令|R/.test(eraStr)) eraCode = "R";
-    else if (/大正|T/.test(eraStr)) eraCode = "T";
+    else if (/大正|太正|T/.test(eraStr)) eraCode = "T";
     else if (/明治|M/.test(eraStr)) eraCode = "M";
 
     const seirekiYear = convertWarekiToSeireki(eraCode, yearNum);
@@ -405,7 +424,6 @@ function extractRatioAndCategoryStrings(text) {
   let ratioText = "";
   let catText = "";
 
-  // 全角・半角の正規化およびスペースの統一
   let normalized = text
     .replace(/[０-９]/g, s => String.fromCharCode(s.charCodeAt(0) - 0xfee0))
     .replace(/\s+/g, ' ');
@@ -415,16 +433,14 @@ function extractRatioAndCategoryStrings(text) {
   else if (/2割/.test(normalized)) ratioText = "2割";
   else if (/3割/.test(normalized)) ratioText = "3割";
 
-  // 2. 限度区分の抽出（「特定疾病区分」などを除外するため「限度区分」周辺を優先探知）
+  // 2. 限度区分の抽出
   let targetArea = normalized;
   
-  // 「限度区分」というラベルがある場合、その直後30文字程度を優先して抽出対象にする
   const limitMatch = normalized.match(/限度区分[\s:]*([^\n\r]{1,30})/);
   if (limitMatch) {
     targetArea = limitMatch[1];
   }
 
-  // 「区分」だけでなく「区」のみの表記（「区Ⅱ」「区Ⅰ」等）にも対応
   if (/区(分)?\s*[：:\s]*ア|[\(（]ア[\)）]/i.test(targetArea)) catText = "区分ア";
   else if (/区(分)?\s*[：:\s]*イ|[\(（]イ[\)）]/i.test(targetArea)) catText = "区分イ";
   else if (/区(分)?\s*[：:\s]*ウ|[\(（]ウ[\)）]/i.test(targetArea)) catText = "区分ウ";
@@ -458,7 +474,7 @@ function updateCategoryFromOCRInputs() {
     else if (/ウ/i.test(catVal)) targetCategory = "C";
     else if (/エ/i.test(catVal)) targetCategory = "D";
     else if (/オ/i.test(catVal)) targetCategory = "E";
-    else if (catVal || ratioVal) targetCategory = "C"; // 未指定・標準は区分ウ
+    else if (catVal || ratioVal) targetCategory = "C";
   } else {
     if (/現役.*Ⅲ|Ⅲ/i.test(catVal)) targetCategory = "active3";
     else if (/現役.*Ⅱ|Ⅱ/i.test(catVal)) targetCategory = "active2";
