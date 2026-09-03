@@ -1,0 +1,24 @@
+{
+  "lastUpdated": "2026-08-01",
+  "revisions": [
+    {
+      "effectiveFrom": "2026-08-01",
+      "effectiveTo": "9999-12-31",
+      "under70": {
+        "top":    { "name": "区分ア（標準報酬 83万円以上）", "baseCap": 270300, "threshold": 901000, "rate": 0.01, "multipleCap": 140100, "yearlyCap": 1680000, "copayRate": 0.30 },
+        "high":   { "name": "区分イ（標準報酬 53万～79万円）", "baseCap": 179100, "threshold": 597000, "rate": 0.01, "multipleCap": 93000,  "yearlyCap": 1110000, "copayRate": 0.30 },
+        "middle": { "name": "区分ウ（標準報酬 28万～50万円）", "baseCap": 85800,  "threshold": 286000, "rate": 0.01, "multipleCap": 44400,  "yearlyCap": 530000,  "copayRate": 0.30 },
+        "low":    { "name": "区分エ（標準報酬 26万円以下）", "baseCap": 61500,  "threshold": 0,      "rate": 0.00, "multipleCap": 44400,  "yearlyCap": 530000,  "copayRate": 0.30 },
+        "nonTax": { "name": "区分オ（住民税非課税世帯）",     "baseCap": 36900,  "threshold": 0,      "rate": 0.00, "multipleCap": 24600,  "yearlyCap": 290000,  "copayRate": 0.30 }
+      },
+      "over70": {
+        "top":     { "name": "現役並みⅢ（課税所得 690万円以上）", "baseCap": 270300, "threshold": 901000, "rate": 0.01, "multipleCap": 140100, "yearlyCap": 1680000, "copayRate": 0.30 },
+        "high_ii": { "name": "現役並みⅡ（課税所得 380万～690万円）", "baseCap": 179100, "threshold": 597000, "rate": 0.01, "multipleCap": 93000,  "yearlyCap": 1110000, "copayRate": 0.30 },
+        "high_i":  { "name": "現役並みⅠ（課税所得 145万～380万円）", "baseCap": 85800,  "threshold": 286000, "rate": 0.01, "multipleCap": 44400,  "yearlyCap": 530000,  "copayRate": 0.30 },
+        "middle":  { "name": "一般（課税所得 145万円未満）",       "outpatientCap": 22000, "householdCap": 61500, "multipleCap": 44400, "yearlyCap": 530000, "copayRate": 0.20 },
+        "low_ii":  { "name": "低所得Ⅱ（住民税非課税）",            "outpatientCap": 11000, "householdCap": 25700, "multipleCap": 24600, "yearlyCap": 290000, "copayRate": 0.10 },
+        "low_i":   { "name": "低所得Ⅰ（年金収入 82.65万円以下等）", "outpatientCap": 8000,  "householdCap": 15700, "multipleCap": null,  "yearlyCap": 180000, "copayRate": 0.10 }
+      }
+    }
+  ]
+}
