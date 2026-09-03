@@ -83,8 +83,8 @@ hr { border: 0; border-top: 1px solid #ddd; margin: 20px 0; }
           <input id="ocrRatio" type="text" placeholder="例: 3割" oninput="updateCategoryFromOCRInputs()">
         </div>
         <div style="flex: 1;">
-          <label style="margin-top: 0; font-size: 0.85rem;" for="ocrCategory">限度額区分</label>
-          <input id="ocrCategory" type="text" placeholder="例: 区分ウ" oninput="updateCategoryFromOCRInputs()">
+          <label style="margin-top: 0; font-size: 0.85rem;" for="ocrCategory">限度区分</label>
+          <input id="ocrCategory" type="text" placeholder="例: 区分ウ, 区Ⅱ" oninput="updateCategoryFromOCRInputs()">
         </div>
       </div>
     </div>
@@ -405,23 +405,37 @@ function extractRatioAndCategoryStrings(text) {
   let ratioText = "";
   let catText = "";
 
-  // 負担割合の抽出
-  if (/1割|１割/.test(text)) ratioText = "1割";
-  else if (/2割|２割/.test(text)) ratioText = "2割";
-  else if (/3割|３割/.test(text)) ratioText = "3割";
+  // 全角・半角の正規化およびスペースの統一
+  let normalized = text
+    .replace(/[０-９]/g, s => String.fromCharCode(s.charCodeAt(0) - 0xfee0))
+    .replace(/\s+/g, ' ');
 
-  // 限度額区分の抽出
-  if (/区分\s*[：:\s]*ア|区分ア|[\(（]ア[\)）]/i.test(text)) catText = "区分ア";
-  else if (/区分\s*[：:\s]*イ|区分イ|[\(（]イ[\)）]/i.test(text)) catText = "区分イ";
-  else if (/区分\s*[：:\s]*ウ|区分ウ|[\(（]ウ[\)）]/i.test(text)) catText = "区分ウ";
-  else if (/区分\s*[：:\s]*エ|区分エ|[\(（]エ[\)）]/i.test(text)) catText = "区分エ";
-  else if (/区分\s*[：:\s]*オ|区分オ|[\(（]オ[\)）]/i.test(text)) catText = "区分オ";
-  else if (/現役並み所得者Ⅲ|現役Ⅲ|区分Ⅲ/i.test(text)) catText = "現役並みⅢ";
-  else if (/現役並み所得者Ⅱ|現役Ⅱ|区分Ⅱ/i.test(text)) catText = "現役並みⅡ";
-  else if (/現役並み所得者Ⅰ|現役Ⅰ|区分Ⅰ/i.test(text)) catText = "現役並みⅠ";
-  else if (/低所得者Ⅱ|低所得Ⅱ/i.test(text)) catText = "低所得Ⅱ";
-  else if (/低所得者Ⅰ|低所得Ⅰ/i.test(text)) catText = "低所得Ⅰ";
-  else if (/一般/.test(text)) catText = "一般";
+  // 1. 負担割合の抽出
+  if (/1割/.test(normalized)) ratioText = "1割";
+  else if (/2割/.test(normalized)) ratioText = "2割";
+  else if (/3割/.test(normalized)) ratioText = "3割";
+
+  // 2. 限度区分の抽出（「特定疾病区分」などを除外するため「限度区分」周辺を優先探知）
+  let targetArea = normalized;
+  
+  // 「限度区分」というラベルがある場合、その直後30文字程度を優先して抽出対象にする
+  const limitMatch = normalized.match(/限度区分[\s:]*([^\n\r]{1,30})/);
+  if (limitMatch) {
+    targetArea = limitMatch[1];
+  }
+
+  // 「区分」だけでなく「区」のみの表記（「区Ⅱ」「区Ⅰ」等）にも対応
+  if (/区(分)?\s*[：:\s]*ア|[\(（]ア[\)）]/i.test(targetArea)) catText = "区分ア";
+  else if (/区(分)?\s*[：:\s]*イ|[\(（]イ[\)）]/i.test(targetArea)) catText = "区分イ";
+  else if (/区(分)?\s*[：:\s]*ウ|[\(（]ウ[\)）]/i.test(targetArea)) catText = "区分ウ";
+  else if (/区(分)?\s*[：:\s]*エ|[\(（]エ[\)）]/i.test(targetArea)) catText = "区分エ";
+  else if (/区(分)?\s*[：:\s]*オ|[\(（]オ[\)）]/i.test(targetArea)) catText = "区分オ";
+  else if (/現役並み(所得者)?Ⅲ|現役Ⅲ|区(分)?Ⅲ/i.test(targetArea)) catText = "現役並みⅢ";
+  else if (/現役並み(所得者)?Ⅱ|現役Ⅱ|区(分)?Ⅱ/i.test(targetArea)) catText = "現役並みⅡ";
+  else if (/現役並み(所得者)?Ⅰ|現役Ⅰ|区(分)?Ⅰ/i.test(targetArea)) catText = "現役並みⅠ";
+  else if (/低所得(者)?Ⅱ|低所得Ⅱ|区(分)?Ⅱ|区Ⅱ/i.test(targetArea)) catText = "低所得Ⅱ";
+  else if (/低所得(者)?Ⅰ|低所得Ⅰ|区(分)?Ⅰ|区Ⅰ/i.test(targetArea)) catText = "低所得Ⅰ";
+  else if (/一般/.test(targetArea)) catText = "一般";
 
   document.getElementById("ocrRatio").value = ratioText;
   document.getElementById("ocrCategory").value = catText;
@@ -449,8 +463,8 @@ function updateCategoryFromOCRInputs() {
     if (/現役.*Ⅲ|Ⅲ/i.test(catVal)) targetCategory = "active3";
     else if (/現役.*Ⅱ|Ⅱ/i.test(catVal)) targetCategory = "active2";
     else if (/現役.*Ⅰ|Ⅰ/i.test(catVal)) targetCategory = "active1";
-    else if (/低所得.*Ⅱ/i.test(catVal)) targetCategory = "low2";
-    else if (/低所得.*Ⅰ/i.test(catVal)) targetCategory = "low1";
+    else if (/低所得.*Ⅱ|Ⅱ|区Ⅱ/i.test(catVal)) targetCategory = "low2";
+    else if (/低所得.*Ⅰ|Ⅰ|区Ⅰ/i.test(catVal)) targetCategory = "low1";
     else if (/一般/i.test(catVal)) targetCategory = "general";
     else if (/3割/i.test(ratioVal)) targetCategory = "active1";
     else if (/1割|2割/i.test(ratioVal)) targetCategory = "general";
