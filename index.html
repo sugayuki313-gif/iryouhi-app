@@ -92,13 +92,16 @@ hr { border: 0; border-top: 1px solid #ddd; margin: 20px 0; }
 
     <label for="ageCategory">年齢区分</label>
     <select id="ageCategory" onchange="updateAgeUI()">
+      <option value="">選択してください</option>
       <option value="under70">70歳未満</option>
-      <option value="70to74" selected>70～74歳</option>
+      <option value="70to74">70～74歳</option>
       <option value="over75">75歳以上</option>
     </select>
 
     <label for="category">所得区分・限度区分</label>
-    <select id="category"></select>
+    <select id="category">
+      <option value="">年齢区分を先に選択してください</option>
+    </select>
 
     <hr>
 
@@ -228,16 +231,31 @@ function onBirthdateChange() {
 }
 
 function updateAgeUI() {
-  if (!masterRules) return;
   const ageCategory = document.getElementById("ageCategory").value;
   const categorySelect = document.getElementById("category");
   const type = document.getElementById("treatmentType");
   const typeLabel = document.getElementById("treatmentTypeLabel");
 
+  categorySelect.innerHTML = "";
+
+  if (!ageCategory || !masterRules) {
+    const defaultOpt = document.createElement("option");
+    defaultOpt.value = "";
+    defaultOpt.textContent = "年齢区分を先に選択してください";
+    categorySelect.appendChild(defaultOpt);
+    type.disabled = true;
+    typeLabel.style.opacity = "0.5";
+    return;
+  }
+
   const groupKey = (ageCategory === "under70") ? "under70" : "over70";
   const rulesObj = masterRules.revisions[0][groupKey];
 
-  categorySelect.innerHTML = "";
+  const defaultOpt = document.createElement("option");
+  defaultOpt.value = "";
+  defaultOpt.textContent = "選択してください";
+  categorySelect.appendChild(defaultOpt);
+
   Object.keys(rulesObj).forEach(key => {
     const opt = document.createElement("option");
     opt.value = key;
@@ -246,9 +264,11 @@ function updateAgeUI() {
   });
 
   if (ageCategory === "under70") {
-    type.disabled = true; typeLabel.style.opacity = "0.5";
+    type.disabled = true;
+    typeLabel.style.opacity = "0.5";
   } else {
-    type.disabled = false; typeLabel.style.opacity = "1.0";
+    type.disabled = false;
+    typeLabel.style.opacity = "1.0";
   }
 }
 
@@ -302,18 +322,72 @@ async function runOCR(canvas) {
 }
 
 function parseOCRResult(text) {
-  let normalized = text.replace(/[０-９]/g, s => String.fromCharCode(s.charCodeAt(0) - 0xfee0)).toUpperCase();
-  const warekiRegex = /(明治|大正|昭和|平成|令和|昭|平|令|[MTSHR])\s*(\d{1,2})\s*年?\s*(\d{1,2})\s*月?\s*(\d{1,2})\s*日?/;
-  let match = normalized.match(warekiRegex);
-  if (match) {
+  // 全角数字を半角数字に変換、スペース整理
+  let normalized = text.replace(/[０-９]/g, s => String.fromCharCode(s.charCodeAt(0) - 0xfee0)).replace(/\s+/g, ' ');
+
+  // 和暦日付パターン
+  const warekiRegex = /(明治|大正|昭和|平成|令和|昭|平|令|[MTSHR])\s*(\d{1,2})\s*年\s*(\d{1,2})\s*月\s*(\d{1,2})\s*日?/g;
+
+  const ignoreKeywords = ["交付", "発行", "有効", "取得", "経過", "認定", "作成"];
+  const birthKeywords = ["生年月日", "生年", "生", "誕"];
+
+  let bestMatch = null;
+  let highestScore = -1;
+
+  let match;
+  while ((match = warekiRegex.exec(normalized)) !== null) {
+    const fullMatchIndex = match.index;
+    const prefixText = normalized.substring(Math.max(0, fullMatchIndex - 15), fullMatchIndex);
+
+    // 除外キーワードが直前にある場合はスキップ
+    if (ignoreKeywords.some(kw => prefixText.includes(kw))) {
+      continue;
+    }
+
+    let eraStr = match[1];
+    let yearNum = Number(match[2]);
+    let monthNum = Number(match[3]);
+    let dayNum = Number(match[4]);
+
     let eraCode = "S";
-    if (/平成|平|H/.test(match[1])) eraCode = "H";
-    else if (/令和|令|R/.test(match[1])) eraCode = "R";
-    document.getElementById("birthEra").value = eraCode;
-    document.getElementById("birthYear").value = Number(match[2]);
-    document.getElementById("birthMonth").value = Number(match[3]);
-    document.getElementById("birthDay").value = Number(match[4]);
+    if (/平成|平|H/.test(eraStr)) eraCode = "H";
+    else if (/令和|令|R/.test(eraStr)) eraCode = "R";
+    else if (/大正|T/.test(eraStr)) eraCode = "T";
+    else if (/明治|M/.test(eraStr)) eraCode = "M";
+
+    // 西暦・年齢計算による妥当性テスト
+    const seirekiYear = convertWarekiToSeireki(eraCode, yearNum);
+    if (!seirekiYear) continue;
+
+    const birthDate = new Date(seirekiYear, monthNum - 1, dayNum);
+    const today = new Date();
+    let age = today.getFullYear() - birthDate.getFullYear();
+    const m = today.getMonth() - birthDate.getMonth();
+    if (m < 0 || (m === 0 && today.getDate() < birthDate.getDate())) age--;
+
+    // 0歳〜115歳でなければ不正な日付として無視（交付年月日等の未来や最近の日付を除外）
+    if (age < 0 || age > 115) continue;
+
+    let score = 1;
+    // 「生年月日」「生」などのキーワードが近くにあればスコアを上げる
+    if (birthKeywords.some(kw => prefixText.includes(kw))) {
+      score += 10;
+    }
+
+    if (score > highestScore) {
+      highestScore = score;
+      bestMatch = { eraCode, yearNum, monthNum, dayNum };
+    }
+  }
+
+  if (bestMatch) {
+    document.getElementById("birthEra").value = bestMatch.eraCode;
+    document.getElementById("birthYear").value = bestMatch.yearNum;
+    document.getElementById("birthMonth").value = bestMatch.monthNum;
+    document.getElementById("birthDay").value = bestMatch.dayNum;
     onBirthdateChange();
+  } else {
+    alert("生年月日の判定に失敗しました。手動でご入力ください。");
   }
 }
 
@@ -323,11 +397,26 @@ function clearInsuranceInfo() {
   document.getElementById("reparseBtn").style.display = "none";
   document.getElementById("clearBtn").style.display = "none";
   initWarekiSelects();
+  document.getElementById("ageCategory").value = "";
+  updateAgeUI();
   document.getElementById("result").style.display = "none";
 }
 
 function calculate() {
   if (!masterRules) return;
+
+  const ageCat = document.getElementById("ageCategory").value;
+  if (!ageCat) {
+    alert("年齢区分を選択してください。");
+    return;
+  }
+
+  const cat = document.getElementById("category").value;
+  if (!cat) {
+    alert("所得区分・限度区分を選択してください。");
+    return;
+  }
+
   const costInput = document.getElementById("medicalCost").value;
   if (!costInput || Number(costInput) <= 0) {
     alert("想定の医療費総額（10割）を入力してください。");
@@ -335,8 +424,6 @@ function calculate() {
   }
 
   const month = document.getElementById("treatmentMonth").value;
-  const ageCat = document.getElementById("ageCategory").value;
-  const cat = document.getElementById("category").value;
   const cost = Number(costInput);
   const isMultiple = document.getElementById("multiple").value === "3";
   const isOutpatient = document.getElementById("treatmentType").value === "outpatient";
