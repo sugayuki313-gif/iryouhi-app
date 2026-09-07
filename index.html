@@ -449,7 +449,7 @@ function extractRatioAndCategoryStrings(text) {
   else if (/現役並み(所得者)?Ⅲ|現役Ⅲ|区(分)?Ⅲ/i.test(targetArea)) catText = "現役並みⅢ";
   else if (/現役並み(所得者)?Ⅱ|現役Ⅱ|区(分)?Ⅱ/i.test(targetArea)) catText = "現役並みⅡ";
   else if (/現役並み(所得者)?Ⅰ|現役Ⅰ|区(分)?Ⅰ/i.test(targetArea)) catText = "現役並みⅠ";
-  else if (/低所得(者)?Ⅱ|低所得Ⅱ|区(分)?Ⅱ|区Ⅱ/i.test(targetArea)) catText = "低所得Ⅱ";
+  else if (/低所得(者)?Ⅱ|低所得Ⅱ|区(分)?Ⅱ|区Ⅰ/i.test(targetArea)) catText = "低所得Ⅱ";
   else if (/低所得(者)?Ⅰ|低所得Ⅰ|区(分)?Ⅰ|区Ⅰ/i.test(targetArea)) catText = "低所得Ⅰ";
   else if (/一般/.test(targetArea)) catText = "一般";
 
@@ -469,12 +469,13 @@ function updateCategoryFromOCRInputs() {
   let targetCategory = "";
 
   if (ageCat === "under70") {
-    if (/ア/i.test(catVal)) targetCategory = "A";
-    else if (/イ/i.test(catVal)) targetCategory = "B";
-    else if (/ウ/i.test(catVal)) targetCategory = "C";
-    else if (/エ/i.test(catVal)) targetCategory = "D";
-    else if (/オ/i.test(catVal)) targetCategory = "E";
-    else if (catVal || ratioVal) targetCategory = "C";
+    // rules.json のキー名（top, high, middle, low, nonTax）に合わせてマッピング
+    if (/ア/i.test(catVal)) targetCategory = "top";
+    else if (/イ/i.test(catVal)) targetCategory = "high";
+    else if (/ウ/i.test(catVal)) targetCategory = "middle";
+    else if (/エ/i.test(catVal)) targetCategory = "low";
+    else if (/オ/i.test(catVal)) targetCategory = "nonTax";
+    else if (catVal || ratioVal) targetCategory = "middle";
   } else {
     if (/現役.*Ⅲ|Ⅲ/i.test(catVal)) targetCategory = "active3";
     else if (/現役.*Ⅱ|Ⅱ/i.test(catVal)) targetCategory = "active2";
