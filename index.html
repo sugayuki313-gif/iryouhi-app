@@ -297,7 +297,7 @@ async function handleImageFile(file) {
   const preview = document.getElementById("preview");
   preview.src = imageURL; preview.style.display = "block";
 
-  document.getElementById("ocrProgress").textContent = "画像解析中…";
+  document.getElementById("ocrProgress").textContent = "画像前処理中…";
   try {
     const canvas = await preprocessImage(file);
     await runOCR(canvas);
@@ -308,34 +308,20 @@ async function handleImageFile(file) {
   }
 }
 
-// Canvasを使った画像前処理（二値化・ノイズ軽減）
+// Canvasを使った画像前処理（固定二値化を廃止し、コントラストを強調）
 function preprocessImage(file) {
   return new Promise((resolve, reject) => {
     const img = new Image();
     const url = URL.createObjectURL(file);
     img.onload = () => {
       const canvas = document.createElement("canvas");
-      canvas.width = img.naturalWidth;
-      canvas.height = img.naturalHeight;
+      canvas.width = img.naturalWidth || img.width;
+      canvas.height = img.naturalHeight || img.height;
       const ctx = canvas.getContext("2d");
       
-      ctx.drawImage(img, 0, 0);
+      ctx.filter = "grayscale(100%) contrast(180%)";
+      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
       
-      const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-      const data = imageData.data;
-      
-      // 白黒（二値化）処理
-      for (let i = 0; i < data.length; i += 4) {
-        const avg = 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
-        const threshold = 130; // 背景色・薄い罫線を飛ばす閾値
-        const v = avg > threshold ? 255 : 0;
-        
-        data[i]     = v;
-        data[i + 1] = v;
-        data[i + 2] = v;
-      }
-      
-      ctx.putImageData(imageData, 0, 0);
       URL.revokeObjectURL(url);
       resolve(canvas);
     };
@@ -359,11 +345,18 @@ async function runOCR(canvas) {
   document.getElementById("clearBtn").style.display = "block";
 }
 
-function parseOCRResult(text) {
-  let normalized = text.replace(/[０-９]/g, s => String.fromCharCode(s.charCodeAt(0) - 0xfee0)).replace(/\s+/g, ' ');
+// 行単位での解析＆補正処理
+function parseOCRResult(rawText) {
+  const lines = rawText.split(/\r?\n/).map(l => l.trim()).filter(l => l.length > 0);
+
+  // 全角数字を半角に、連続空白を短縮
+  const normalizedLines = lines.map(l => 
+    l.replace(/[０-９]/g, s => String.fromCharCode(s.charCodeAt(0) - 0xfee0)).replace(/\s+/g, ' ')
+  );
+  const fullText = normalizedLines.join('\n');
 
   // 1. 生年月日の解析
-  const warekiRegex = /(明治|大正|昭和|平成|令和|昭|平|令|[MTSHR])\s*(\d{1,2})\s*年\s*(\d{1,2})\s*月\s*(\d{1,2})\s*日?/g;
+  const warekiRegex = /(明治|大正|昭和|平成|令和|昭|平|令|[MTSHR])\s*([\d元]+)\s*年\s*(\d{1,2})\s*月\s*(\d{1,2})\s*日?/g;
   const ignoreKeywords = ["交付", "発行", "有効", "取得", "経過", "認定", "作成"];
   const birthKeywords = ["生年月日", "生年", "生", "誕"];
 
@@ -371,14 +364,15 @@ function parseOCRResult(text) {
   let highestScore = -1;
   let match;
 
-  while ((match = warekiRegex.exec(normalized)) !== null) {
+  while ((match = warekiRegex.exec(fullText)) !== null) {
     const fullMatchIndex = match.index;
-    const prefixText = normalized.substring(Math.max(0, fullMatchIndex - 15), fullMatchIndex);
+    const prefixText = fullText.substring(Math.max(0, fullMatchIndex - 15), fullMatchIndex);
 
     if (ignoreKeywords.some(kw => prefixText.includes(kw))) continue;
 
     let eraStr = match[1];
-    let yearNum = Number(match[2]);
+    let yearStr = match[2] === "元" ? "1" : match[2];
+    let yearNum = Number(yearStr);
     let monthNum = Number(match[3]);
     let dayNum = Number(match[4]);
 
@@ -416,49 +410,77 @@ function parseOCRResult(text) {
     onBirthdateChange();
   }
 
-  // 2. 負担割合と区分記号のテキスト抽出＆表示窓へのセット
-  extractRatioAndCategoryStrings(normalized);
+  // 2. 負担割合と限度区分のテキスト抽出
+  extractRatioAndCategoryStrings(normalizedLines);
 }
 
-function extractRatioAndCategoryStrings(text) {
+function extractRatioAndCategoryStrings(lines) {
   let ratioText = "";
-  let catText = "";
+  let categoryRaw = "";
 
-  let normalized = text
-    .replace(/[０-９]/g, s => String.fromCharCode(s.charCodeAt(0) - 0xfee0))
-    .replace(/\s+/g, ' ');
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
 
-  // 1. 負担割合の抽出
-  if (/1割/.test(normalized)) ratioText = "1割";
-  else if (/2割/.test(normalized)) ratioText = "2割";
-  else if (/3割/.test(normalized)) ratioText = "3割";
+    // 負担割合の近傍抽出＆誤認識補正（1制, 1害 -> 1割）
+    if (!ratioText && (line.includes("負担割合") || line.includes("割合") || /[123][割制害]/.test(line))) {
+      let targetText = line;
+      if (line.includes("割合") && i + 1 < lines.length) {
+        targetText += " " + lines[i + 1];
+      }
+      const rateMatch = targetText.match(/([123])\s*[割制害]/);
+      if (rateMatch) {
+        ratioText = rateMatch[1] + "割";
+      }
+    }
 
-  // 2. 限度区分の抽出
-  let targetArea = normalized;
-  
-  const limitMatch = normalized.match(/限度区分[\s:]*([^\n\r]{1,30})/);
-  if (limitMatch) {
-    targetArea = limitMatch[1];
+    // 限度区分の近傍抽出（該当行 + 続く2行をバッファ化）
+    if (!categoryRaw && (line.includes("限度区分") || line.includes("区分"))) {
+      let targetText = line;
+      if (i + 1 < lines.length) targetText += " " + lines[i + 1];
+      if (i + 2 < lines.length) targetText += " " + lines[i + 2];
+      categoryRaw = targetText;
+    }
   }
 
-  if (/区(分)?\s*[：:\s]*ア|[\(（]ア[\)）]/i.test(targetArea)) catText = "区分ア";
-  else if (/区(分)?\s*[：:\s]*イ|[\(（]イ[\)）]/i.test(targetArea)) catText = "区分イ";
-  else if (/区(分)?\s*[：:\s]*ウ|[\(（]ウ[\)）]/i.test(targetArea)) catText = "区分ウ";
-  else if (/区(分)?\s*[：:\s]*エ|[\(（]エ[\)）]/i.test(targetArea)) catText = "区分エ";
-  else if (/区(分)?\s*[：:\s]*オ|[\(（]オ[\)）]/i.test(targetArea)) catText = "区分オ";
-  else if (/現役並み(所得者)?Ⅲ|現役Ⅲ|区(分)?Ⅲ/i.test(targetArea)) catText = "現役並みⅢ";
-  else if (/現役並み(所得者)?Ⅱ|現役Ⅱ|区(分)?Ⅱ/i.test(targetArea)) catText = "現役並みⅡ";
-  else if (/現役並み(所得者)?Ⅰ|現役Ⅰ|区(分)?Ⅰ/i.test(targetArea)) catText = "現役並みⅠ";
-  else if (/低所得(者)?Ⅱ|低所得Ⅱ|区(分)?Ⅱ|区Ⅱ/i.test(targetArea)) catText = "低所得Ⅱ";
-  else if (/低所得(者)?Ⅰ|低所得Ⅰ|区(分)?Ⅰ|区Ⅰ/i.test(targetArea)) catText = "低所得Ⅰ";
-  else if (/一般/.test(targetArea)) catText = "一般";
+  // 近傍から直接読めなかった場合の全文フォールバック
+  const fullText = lines.join(" ");
+  if (!ratioText) {
+    const rateMatch = fullText.match(/([123])\s*[割制害]/);
+    if (rateMatch) ratioText = rateMatch[1] + "割";
+  }
+  if (!categoryRaw) {
+    categoryRaw = fullText;
+  }
+
+  // 区分表記揺れの正規化
+  const normalizedCategory = normalizeCategory(categoryRaw);
 
   document.getElementById("ocrRatio").value = ratioText;
-  document.getElementById("ocrCategory").value = catText;
+  document.getElementById("ocrCategory").value = normalizedCategory;
 
   updateCategoryFromOCRInputs();
 }
 
+// OCR表記揺れ正規化関数
+function normalizeCategory(raw) {
+  if (!raw) return "";
+
+  // 70歳未満 区分表記揺れ (ウ, エ, オ, ア, イ)
+  if (/[区分]*\s*[ウワタクUuつ]/.test(raw)) return "区分ウ";
+  if (/[区分]*\s*[エ工]/.test(raw)) return "区分エ";
+  if (/[区分]*\s*[オO0]/.test(raw)) return "区分オ";
+  if (/[区分]*\s*[ア]/.test(raw)) return "区分ア";
+  if (/[区分]*\s*[イ]/.test(raw)) return "区分イ";
+
+  // 70歳以上 区分表記揺れ (区Ⅲ, 区Ⅱ, 区Ⅰ)
+  if (/区\s*[ⅢIII3]|区分\s*[ⅢIII3]/.test(raw)) return "区Ⅲ";
+  if (/区\s*[ⅡII2]|区分\s*[ⅡII2]/.test(raw)) return "区Ⅱ";
+  if (/区\s*[ⅠI1]|区分\s*[ⅠI1]/.test(raw)) return "区Ⅰ";
+
+  return "";
+}
+
+// 負担割合 ＋ 限度区分 マトリクス判定関数
 function updateCategoryFromOCRInputs() {
   const ageCat = document.getElementById("ageCategory").value;
   if (!ageCat) return;
@@ -468,22 +490,33 @@ function updateCategoryFromOCRInputs() {
   const categorySelect = document.getElementById("category");
   let targetCategory = "";
 
+  const is3割 = /3割/.test(ratioVal);
+  const is1or2割 = /1割|2割/.test(ratioVal);
+
   if (ageCat === "under70") {
-    if (/ア/i.test(catVal)) targetCategory = "A";
-    else if (/イ/i.test(catVal)) targetCategory = "B";
-    else if (/ウ/i.test(catVal)) targetCategory = "C";
-    else if (/エ/i.test(catVal)) targetCategory = "D";
-    else if (/オ/i.test(catVal)) targetCategory = "E";
-    else if (catVal || ratioVal) targetCategory = "C";
+    if (/ア/i.test(catVal)) targetCategory = "top";
+    else if (/イ/i.test(catVal)) targetCategory = "high";
+    else if (/ウ/i.test(catVal)) targetCategory = "middle";
+    else if (/エ/i.test(catVal)) targetCategory = "low";
+    else if (/オ/i.test(catVal)) targetCategory = "nonTax";
   } else {
-    if (/現役.*Ⅲ|Ⅲ/i.test(catVal)) targetCategory = "active3";
-    else if (/現役.*Ⅱ|Ⅱ/i.test(catVal)) targetCategory = "active2";
-    else if (/現役.*Ⅰ|Ⅰ/i.test(catVal)) targetCategory = "active1";
-    else if (/低所得.*Ⅱ|Ⅱ|区Ⅱ/i.test(catVal)) targetCategory = "low2";
-    else if (/低所得.*Ⅰ|Ⅰ|区Ⅰ/i.test(catVal)) targetCategory = "low1";
-    else if (/一般/i.test(catVal)) targetCategory = "general";
-    else if (/3割/i.test(ratioVal)) targetCategory = "active1";
-    else if (/1割|2割/i.test(ratioVal)) targetCategory = "general";
+    // 70歳以上（後期高齢者含む）の判定ロジック
+    if (is3割) {
+      if (/Ⅲ|3/i.test(catVal)) targetCategory = "top";
+      else if (/Ⅱ|2/i.test(catVal)) targetCategory = "high_ii";
+      else if (/Ⅰ|1/i.test(catVal)) targetCategory = "high_i";
+      else targetCategory = "top"; // 区分なし3割は現役並みⅢを規定値とする
+    } else if (is1or2割) {
+      if (/Ⅱ|2/i.test(catVal)) targetCategory = "low_ii";
+      else if (/Ⅰ|1/i.test(catVal)) targetCategory = "low_i";
+      else targetCategory = "middle"; // 1・2割のみは一般
+    } else {
+      // 割合が拾えなかった場合のフォールバック処理
+      if (/Ⅲ|3/i.test(catVal)) targetCategory = "top";
+      else if (/Ⅱ|2/i.test(catVal)) targetCategory = "low_ii";
+      else if (/Ⅰ|1/i.test(catVal)) targetCategory = "low_i";
+      else if (/一般/i.test(catVal)) targetCategory = "middle";
+    }
   }
 
   if (targetCategory && categorySelect.querySelector(`option[value="${targetCategory}"]`)) {
@@ -537,6 +570,11 @@ function calculate() {
   const rev = masterRules.revisions.find(r => month >= r.effectiveFrom && month <= r.effectiveTo) || masterRules.revisions[0];
   const groupKey = (ageCat === "under70") ? "under70" : "over70";
   const rule = rev[groupKey][cat];
+
+  if (!rule) {
+    alert("該当する計算ルールが見つかりませんでした。");
+    return;
+  }
 
   let cap = 0;
   let baseFormula = "";
