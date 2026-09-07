@@ -1,17 +1,324 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>医療費・高額療養費かんたんシミュレーター（2026年8月改定対応版）</title>
+<script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+
+<style>
+* { box-sizing: border-box; }
+body { margin: 0; padding: 16px; background: #f3f6f8; color: #222; font-family: -apple-system, BlinkMacSystemFont, "Noto Sans JP", sans-serif; line-height: 1.6; }
+.container { max-width: 600px; margin: auto; }
+.card { background: #fff; border-radius: 16px; padding: 22px; margin-bottom: 16px; box-shadow: 0 3px 12px rgba(0,0,0,.08); }
+h1 { font-size: 1.35rem; text-align: center; margin: 0 0 8px; color: #075ca8; }
+.subtitle { text-align: center; color: #555; font-size: .9rem; margin-bottom: 20px; }
+.badge { display: inline-block; background: #e3f2fd; color: #0d47a1; font-size: .8rem; font-weight: bold; padding: 3px 10px; border-radius: 12px; margin-bottom: 8px; }
+.step { font-size: 1.05rem; font-weight: bold; margin: 20px 0 8px; }
+.help { font-size: .85rem; color: #666; margin-top: 5px; }
+label { display: block; font-weight: bold; margin-top: 14px; }
+select, input[type="number"], input[type="text"], input[type="month"] { width: 100%; padding: 14px; margin-top: 6px; border: 1px solid #bbb; border-radius: 10px; font-size: 1rem; background: #fff; }
+.wareki-group { display: flex; gap: 6px; margin-top: 6px; }
+.wareki-group select { padding: 12px 6px; margin-top: 0; }
+.inline-group { display: flex; gap: 10px; }
+.inline-group > div { flex: 1; }
+button { width: 100%; border: 0; border-radius: 12px; padding: 15px; font-size: 1rem; font-weight: bold; cursor: pointer; margin-top: 10px; }
+.primary { background: #075ca8; color: white; }
+.secondary { background: #e8f0f7; color: #075ca8; }
+.clear-btn { background: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
+.privacy { background: #edf8f0; border-left: 5px solid #2e8b57; padding: 14px; border-radius: 8px; font-size: .9rem; }
+.ocr-area { border: 2px dashed #aaa; border-radius: 12px; padding: 18px; text-align: center; margin-top: 10px; }
+#preview { max-width: 100%; max-height: 360px; margin-top: 15px; border-radius: 10px; display: none; }
+.progress { margin-top: 12px; font-size: .9rem; font-weight: bold; }
+.result { display: none; background: #eef7ff; border-left: 6px solid #075ca8; padding: 18px; border-radius: 10px; margin-top: 20px; }
+.result-price { text-align: center; font-size: 2rem; font-weight: bold; color: #c62828; margin: 8px 0; }
+.big-message { font-size: 1.05rem; font-weight: bold; text-align: center; }
+.formula-box { background: #ffffff; border: 1px solid #bcd8f3; border-radius: 8px; padding: 12px; margin: 12px 0; font-size: .9rem; }
+.formula-code { font-family: monospace; background: #f4f4f4; padding: 4px 8px; border-radius: 4px; display: block; margin: 6px 0; word-break: break-all; }
+.yearly-info { background: #fff8e1; border: 1px solid #ffe082; border-radius: 8px; padding: 12px; margin-top: 10px; font-size: .88rem; color: #5d4037; }
+.warning { background: #fff6df; border-left: 5px solid #e3a400; padding: 14px; border-radius: 8px; margin-top: 15px; }
+#debugText { white-space: pre-wrap; word-break: break-word; font-size: .75rem; background: #222; color: #eee; padding: 10px; border-radius: 8px; max-height: 220px; overflow: auto; display: none; }
+.hidden { display: none !important; }
+hr { border: 0; border-top: 1px solid #ddd; margin: 20px 0; }
+</style>
+</head>
+
+<body>
+<div class="container">
+  <div class="card" style="text-align: center;">
+    <span class="badge">令和8年8月改定・最新版ルール適用</span>
+    <h1>医療費・高額療養費<br>かんたんシミュレーター</h1>
+    <div class="subtitle">保険資格情報を撮影して、自己負担額の目安を確認できます</div>
+    <div class="privacy" style="text-align: left;">
+      <strong>🔒 個人情報について</strong><br>
+      撮影・入力された情報は外部サーバーへ送信されません。すべての計算とOCR処理はブラウザ内で完了します。
+    </div>
+  </div>
+
+  <!-- STEP 1 -->
+  <div class="card">
+    <div class="step">① 保険資格情報を撮影（任意）</div>
+    <div class="help">保険証・資格確認書などの写真を撮影すると生年月日・負担割合・適用区分が自動読み取りされます。</div>
+    <div class="ocr-area">
+      <input id="cameraInput" type="file" accept="image/*" capture="environment" class="hidden">
+      <input id="fileInput" type="file" accept="image/*" class="hidden">
+      <button class="primary" onclick="document.getElementById('cameraInput').click()">📷 保険資格情報を撮影する</button>
+      <button class="secondary" onclick="document.getElementById('fileInput').click()">🖼️ 画像ファイルを選ぶ</button>
+      <button id="reparseBtn" class="secondary" style="display:none; background:#fff3cd; color:#856404; border:1px solid #ffeeba;" onclick="reparseOCR()">🔄 自動入力し直す</button>
+      <button id="clearBtn" class="clear-btn" style="display:none;" onclick="clearInsuranceInfo()">🗑️ クリア</button>
+      <img id="preview" alt="撮影画像">
+      <div id="ocrProgress" class="progress"></div>
+    </div>
+  </div>
+
+  <!-- STEP 2 -->
+  <div class="card">
+    <div class="step">② 医療費・患者情報について入力</div>
+
+    <div class="inline-group">
+      <div>
+        <label for="ocrRatio">負担割合（OCR読み取り）</label>
+        <input id="ocrRatio" type="text" placeholder="例: 1割" oninput="updateCategoryFromOCRInputs()">
+      </div>
+      <div>
+        <label for="ocrCategory">限度区分表記（OCR読み取り）</label>
+        <input id="ocrCategory" type="text" placeholder="例: 区Ⅱ, 区分ウ" oninput="updateCategoryFromOCRInputs()">
+      </div>
+    </div>
+
+    <label>生年月日（和暦）</label>
+    <div class="wareki-group">
+      <select id="birthEra" onchange="onBirthdateChange()" style="flex: 2.2;">
+        <option value="">選択してください</option>
+        <option value="S">昭和</option>
+        <option value="H">平成</option>
+        <option value="R">令和</option>
+        <option value="T">大正</option>
+        <option value="M">明治</option>
+      </select>
+      <select id="birthYear" onchange="onBirthdateChange()" style="flex: 2;"></select>
+      <select id="birthMonth" onchange="onBirthdateChange()" style="flex: 1.8;"></select>
+      <select id="birthDay" onchange="onBirthdateChange()" style="flex: 1.8;"></select>
+    </div>
+
+    <label for="calculatedAge">年齢（自動計算）</label>
+    <input id="calculatedAge" type="text" readonly placeholder="生年月日を選択すると自動計算されます" style="background:#f0f0f0;">
+
+    <label for="ageCategory">年齢区分</label>
+    <select id="ageCategory" onchange="updateAgeUI()">
+      <option value="">選択してください</option>
+      <option value="under70">70歳未満</option>
+      <option value="70to74">70～74歳</option>
+      <option value="over75">75歳以上</option>
+    </select>
+
+    <label for="category">所得区分・限度区分（自動選択）</label>
+    <select id="category">
+      <option value="">年齢区分を先に選択してください</option>
+    </select>
+
+    <hr>
+
+    <label for="treatmentMonth">診療年月</label>
+    <input id="treatmentMonth" type="month" value="2026-08">
+
+    <label for="medicalCost">想定の医療費総額（10割）</label>
+    <input id="medicalCost" type="number" min="0" step="1000" value="" placeholder="例：1000000（金額を入力してください）">
+
+    <label for="treatmentType" id="treatmentTypeLabel">診療タイプ（70歳以上のみ選択）</label>
+    <select id="treatmentType">
+      <option value="outpatient" selected>外来のみ（個人単位上限）</option>
+      <option value="combined">入院＋外来（世帯上限）</option>
+    </select>
+
+    <label for="multiple">過去12か月以内に高額療養費に該当した月</label>
+    <select id="multiple">
+      <option value="0">0～2回</option>
+      <option value="3">3回以上（4回目以降 / 多数回該当）</option>
+    </select>
+
+    <button class="primary" onclick="calculate()">💰 自己負担額を計算する</button>
+  </div>
+
+  <!-- RESULT -->
+  <div class="card result" id="result">
+    <div style="text-align:center; font-size:1rem;">この月（単月）の自己負担額の目安</div>
+    <div class="result-price" id="resultPrice">-</div>
+    <div class="big-message" id="resultMessage"></div>
+    <hr>
+    <div class="formula-box">
+      <div style="font-weight:bold; color:#075ca8;">📐 条件に基づく月額計算式（2026年8月基準）</div>
+      <div class="formula-code" id="baseFormulaText">-</div>
+    </div>
+    <div id="calculationDetail"></div>
+    <div class="yearly-info" id="yearlyInfo"></div>
+    <div class="warning">
+      <strong>⚠️ ご注意ください</strong><br>
+      この結果は概算です。食事代・差額ベッド代・文書料などは別途かかります。
+    </div>
+  </div>
+
+  <!-- DEBUG -->
+  <div class="card">
+    <button class="secondary" onclick="toggleDebug()">OCRの解析テキスト原文を見る</button>
+    <button id="copyDebugBtn" class="secondary" style="display:none; margin-top:8px; background:#e2e3e5; color:#383d41;" onclick="copyDebugText()">📋 原文テキストをコピーする</button>
+    <pre id="debugText"></pre>
+  </div>
+</div>
+
+<script>
+let masterRules = null;
+let lastOCRText = "";
+let ocrWorker = null;
+
+async function loadMasterRules() {
+  try {
+    const res = await fetch('rules.json');
+    masterRules = await res.json();
+    updateAgeUI();
+  } catch (e) {
+    alert("制度マスタ(rules.json)の読み込みに失敗しました。");
+  }
+}
+
+function initWarekiSelects() {
+  const yearSelect = document.getElementById("birthYear");
+  const monthSelect = document.getElementById("birthMonth");
+  const daySelect = document.getElementById("birthDay");
+  
+  yearSelect.innerHTML = '<option value="">年</option>';
+  monthSelect.innerHTML = '<option value="">月</option>';
+  daySelect.innerHTML = '<option value="">日</option>';
+
+  for (let y = 1; y <= 64; y++) {
+    const opt = document.createElement("option");
+    opt.value = y; opt.textContent = (y === 1 ? "元" : y) + "年";
+    yearSelect.appendChild(opt);
+  }
+  for (let m = 1; m <= 12; m++) {
+    const opt = document.createElement("option");
+    opt.value = m; opt.textContent = m + "月";
+    monthSelect.appendChild(opt);
+  }
+  for (let d = 1; d <= 31; d++) {
+    const opt = document.createElement("option");
+    opt.value = d; opt.textContent = d + "日";
+    daySelect.appendChild(opt);
+  }
+  document.getElementById("birthEra").value = "";
+  document.getElementById("calculatedAge").value = "";
+}
+
+function convertWarekiToSeireki(era, year) {
+  const y = Number(year);
+  switch (era) {
+    case "S": return 1925 + y; case "H": return 1988 + y;
+    case "R": return 2018 + y; case "T": return 1911 + y;
+    case "M": return 1867 + y; default: return null;
+  }
+}
+
+function onBirthdateChange() {
+  const era = document.getElementById("birthEra").value;
+  const year = document.getElementById("birthYear").value;
+  const month = document.getElementById("birthMonth").value;
+  const day = document.getElementById("birthDay").value;
+
+  if (!era || !year || !month || !day) {
+    document.getElementById("calculatedAge").value = "";
+    return;
+  }
+
+  const seirekiYear = convertWarekiToSeireki(era, year);
+  if (!seirekiYear) return;
+
+  const birthDate = new Date(seirekiYear, month - 1, day);
+  const today = new Date();
+  let age = today.getFullYear() - birthDate.getFullYear();
+  const m = today.getMonth() - birthDate.getMonth();
+  if (m < 0 || (m === 0 && today.getDate() < birthDate.getDate())) age--;
+
+  if (age >= 0 && age <= 120) {
+    document.getElementById("calculatedAge").value = `${age} 歳`;
+    document.getElementById("ageCategory").value = age < 70 ? "under70" : (age < 75 ? "70to74" : "over75");
+    updateAgeUI();
+  }
+}
+
+function updateAgeUI() {
+  const ageCategory = document.getElementById("ageCategory").value;
+  const categorySelect = document.getElementById("category");
+  const type = document.getElementById("treatmentType");
+  const typeLabel = document.getElementById("treatmentTypeLabel");
+
+  categorySelect.innerHTML = "";
+
+  if (!ageCategory || !masterRules) {
+    const defaultOpt = document.createElement("option");
+    defaultOpt.value = "";
+    defaultOpt.textContent = "年齢区分を先に選択してください";
+    categorySelect.appendChild(defaultOpt);
+    type.disabled = true;
+    typeLabel.style.opacity = "0.5";
+    return;
+  }
+
+  const groupKey = (ageCategory === "under70") ? "under70" : "over70";
+  const rulesObj = masterRules.revisions[0][groupKey];
+
+  const defaultOpt = document.createElement("option");
+  defaultOpt.value = "";
+  defaultOpt.textContent = "選択してください";
+  categorySelect.appendChild(defaultOpt);
+
+  Object.keys(rulesObj).forEach(key => {
+    const opt = document.createElement("option");
+    opt.value = key;
+    opt.textContent = rulesObj[key].name;
+    categorySelect.appendChild(opt);
+  });
+
+  if (ageCategory === "under70") {
+    type.disabled = true;
+    typeLabel.style.opacity = "0.5";
+  } else {
+    type.disabled = false;
+    typeLabel.style.opacity = "1.0";
+  }
+
+  updateCategoryFromOCRInputs();
+}
+
+async function handleImageFile(file) {
+  if (!file) return;
+  const imageURL = URL.createObjectURL(file);
+  const preview = document.getElementById("preview");
+  preview.src = imageURL; preview.style.display = "block";
+
+  document.getElementById("ocrProgress").innerHTML = "<span style='color:#555;'>画像前処理中…</span>";
+  try {
+    const canvas = await preprocessImage(file);
+    await runOCR(canvas);
+  } catch (e) {
+    alert("読み取りに失敗しました。");
+  } finally {
+    URL.revokeObjectURL(imageURL);
+  }
+}
+
+// 画像前処理：高コントラストフィルタを解除し、解像度拡大のみで文字飛ばしを防ぐ
 function preprocessImage(file) {
   return new Promise((resolve, reject) => {
     const img = new Image();
     const url = URL.createObjectURL(file);
     img.onload = () => {
       const canvas = document.createElement("canvas");
-      // 2倍に拡大して解像度だけを高める（強すぎるコントラスト処理を解除）
       canvas.width = img.naturalWidth * 2;
       canvas.height = img.naturalHeight * 2;
       const ctx = canvas.getContext("2d");
       
       ctx.imageSmoothingEnabled = true;
       ctx.imageSmoothingQuality = "high";
-      // 描画のみ（フィルタで文字が消えるのを防ぐ）
       ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
       
       URL.revokeObjectURL(url);
@@ -21,3 +328,297 @@ function preprocessImage(file) {
     img.src = url;
   });
 }
+
+async function runOCR(canvas) {
+  const progress = document.getElementById("ocrProgress");
+  if (!ocrWorker) {
+    ocrWorker = await Tesseract.createWorker("jpn");
+  }
+
+  await ocrWorker.setParameters({
+    tessedit_pageseg_mode: Tesseract.PSM.SPARSE_TEXT,
+  });
+
+  progress.innerHTML = "<span style='color:#555;'>解析中…</span>";
+  const result = await ocrWorker.recognize(canvas);
+  lastOCRText = result.data.text || "";
+  
+  document.getElementById("debugText").textContent = lastOCRText;
+  document.getElementById("copyDebugBtn").style.display = "block";
+  
+  console.log("=== OCR RAW TEXT ===");
+  console.log(lastOCRText);
+
+  parseOCRResult(lastOCRText);
+  document.getElementById("reparseBtn").style.display = "block";
+  document.getElementById("clearBtn").style.display = "block";
+}
+
+function parseOCRResult(rawText) {
+  let normalizedText = rawText
+    .replace(/[０-９]/g, s => String.fromCharCode(s.charCodeAt(0) - 0xfee0))
+    .replace(/信和/g, "令和")
+    .replace(/区\s*III/gi, "区Ⅲ")
+    .replace(/区\s*lll/gi, "区Ⅲ")
+    .replace(/区\s*3/g, "区Ⅲ")
+    .replace(/区\s*II/gi, "区Ⅱ")
+    .replace(/区\s*11/g, "区Ⅱ")
+    .replace(/区\s*2/g, "区Ⅱ")
+    .replace(/区\s*I/gi, "区Ⅰ")
+    .replace(/区\s*1/g, "区Ⅰ");
+
+  const lines = normalizedText.split(/\r?\n/).map(l => l.trim()).filter(l => l.length > 0);
+
+  // 1. 生年月日の抽出
+  const warekiRegex = /(明治|大正|昭和|平成|令和|昭|平|令|[MTSHR])\s*(\d{1,2})\s*年\s*(\d{1,2})\s*月\s*(\d{1,2})\s*日?/;
+  const ignoreKeywords = ["交付", "有効", "取得", "発効", "該当"];
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    if (ignoreKeywords.some(kw => line.includes(kw))) continue;
+
+    const match = line.match(warekiRegex);
+    if (match) {
+      let eraStr = match[1];
+      let yearNum = Number(match[2]);
+      let monthNum = Number(match[3]);
+      let dayNum = Number(match[4]);
+
+      let eraCode = "S";
+      if (/平成|平|H/.test(eraStr)) eraCode = "H";
+      else if (/令和|令|R/.test(eraStr)) eraCode = "R";
+      else if (/大正|T/.test(eraStr)) eraCode = "T";
+      else if (/明治|M/.test(eraStr)) eraCode = "M";
+
+      const seirekiYear = convertWarekiToSeireki(eraCode, yearNum);
+      if (!seirekiYear) continue;
+
+      const birthDate = new Date(seirekiYear, monthNum - 1, dayNum);
+      const today = new Date();
+      let age = today.getFullYear() - birthDate.getFullYear();
+      const m = today.getMonth() - birthDate.getMonth();
+      if (m < 0 || (m === 0 && today.getDate() < birthDate.getDate())) age--;
+
+      if (age >= 0 && age <= 115) {
+        document.getElementById("birthEra").value = eraCode;
+        document.getElementById("birthYear").value = yearNum;
+        document.getElementById("birthMonth").value = monthNum;
+        document.getElementById("birthDay").value = dayNum;
+        onBirthdateChange();
+        break;
+      }
+    }
+  }
+
+  // 2. 負担割合と限度区分の抽出
+  let foundRatio = "";
+  let foundCategory = "";
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+
+    if (line.includes("負担割合") || line.includes("割合") || line.includes("負担")) {
+      const searchTarget = [line, lines[i + 1] || "", lines[i + 2] || ""].join(" ");
+      const m = searchTarget.match(/([123一二三])\s*(割|害|制|則|劃)/);
+      if (m) {
+        foundRatio = m[1].replace('一','1').replace('二','2').replace('三','3') + "割";
+      }
+    }
+
+    if (line.includes("限度区分") || line.includes("区分") || line.includes("限度")) {
+      const searchTarget = [line, lines[i + 1] || "", lines[i + 2] || ""].join(" ");
+      const m = searchTarget.match(/(区\s*[ⅠⅡⅢ123]|区分\s*[アイウエオA-Ea-eワクラつuU]|低所得\s*[ⅠⅡ12]|一般)/i);
+      if (m) {
+        foundCategory = m[1].replace(/\s+/g, '');
+      }
+    }
+  }
+
+  if (!foundRatio) {
+    const m = normalizedText.match(/([123一二三])\s*(割|害|制|則|劃)/);
+    if (m) foundRatio = m[1].replace('一','1').replace('二','2').replace('三','3') + "割";
+  }
+  if (!foundCategory) {
+    const m = normalizedText.match(/(区\s*[ⅠⅡⅢ]|区分\s*[アイウエオワクラつuU])/i);
+    if (m) foundCategory = m[1].replace(/\s+/g, '');
+  }
+
+  console.log("OCR PARSED RATIO:", foundRatio);
+  console.log("OCR PARSED CATEGORY:", foundCategory);
+
+  document.getElementById("ocrRatio").value = foundRatio;
+  document.getElementById("ocrCategory").value = foundCategory;
+
+  // 未検出項目のフィードバック表示
+  const progress = document.getElementById("ocrProgress");
+  if (!foundRatio && !foundCategory) {
+    progress.innerHTML = "<span style='color:#c62828;'>⚠️ 負担割合・区分が検出されませんでした。手動で入力・選択してください。</span>";
+  } else if (!foundRatio) {
+    progress.innerHTML = "<span style='color:#e65100;'>⚠️ 負担割合が検出されませんでした。手動で入力してください。</span>";
+  } else if (!foundCategory) {
+    progress.innerHTML = "<span style='color:#e65100;'>⚠️ 限度区分が検出されませんでした。手動で選択してください。</span>";
+  } else {
+    progress.innerHTML = "<span style='color:#2e7d32;'>✅ 読み取りが完了しました。</span>";
+  }
+
+  updateCategoryFromOCRInputs();
+}
+
+function updateCategoryFromOCRInputs() {
+  const ageCat = document.getElementById("ageCategory").value;
+  if (!ageCat) return;
+
+  const ratioVal = document.getElementById("ocrRatio").value;
+  const catVal = document.getElementById("ocrCategory").value;
+  const categorySelect = document.getElementById("category");
+  let targetCategory = "";
+
+  if (ageCat === "under70") {
+    if (/区分\s*ア/i.test(catVal)) targetCategory = "top";
+    else if (/区分\s*イ/i.test(catVal)) targetCategory = "high";
+    else if (/区分\s*(ウ|ワ|ク|u|U|つ)/i.test(catVal)) targetCategory = "middle";
+    else if (/区分\s*エ/i.test(catVal)) targetCategory = "low";
+    else if (/区分\s*オ/i.test(catVal)) targetCategory = "nonTax";
+    else if (catVal || ratioVal) targetCategory = "middle";
+  } else {
+    const is3割 = /3割/.test(ratioVal);
+
+    if (is3割) {
+      if (/Ⅲ|3/i.test(catVal)) targetCategory = "top";
+      else if (/Ⅱ|2/i.test(catVal)) targetCategory = "high_ii";
+      else if (/Ⅰ|1/i.test(catVal)) targetCategory = "high_i";
+      else targetCategory = "high_i";
+    } else {
+      if (/区\s*Ⅱ|低所得\s*Ⅱ|Ⅱ|2/i.test(catVal)) targetCategory = "low_ii";
+      else if (/区\s*Ⅰ|低所得\s*Ⅰ|Ⅰ|1/i.test(catVal)) targetCategory = "low_i";
+      else if (/一般/i.test(catVal) || catVal === "") targetCategory = "middle";
+    }
+  }
+
+  if (targetCategory && categorySelect.querySelector(`option[value="${targetCategory}"]`)) {
+    categorySelect.value = targetCategory;
+  }
+}
+
+function reparseOCR() {
+  if (lastOCRText) parseOCRResult(lastOCRText);
+}
+
+function clearInsuranceInfo() {
+  document.getElementById("preview").style.display = "none";
+  document.getElementById("debugText").textContent = "";
+  document.getElementById("copyDebugBtn").style.display = "none";
+  document.getElementById("reparseBtn").style.display = "none";
+  document.getElementById("clearBtn").style.display = "none";
+  document.getElementById("ocrProgress").innerHTML = "";
+  document.getElementById("ocrRatio").value = "";
+  document.getElementById("ocrCategory").value = "";
+  initWarekiSelects();
+  document.getElementById("ageCategory").value = "";
+  updateAgeUI();
+  document.getElementById("result").style.display = "none";
+}
+
+function copyDebugText() {
+  if (!lastOCRText) return;
+  navigator.clipboard.writeText(lastOCRText).then(() => {
+    alert("OCR解析原文をクリップボードにコピーしました！");
+  }).catch(() => {
+    alert("コピーに失敗しました。手動で選択してください。");
+  });
+}
+
+function calculate() {
+  if (!masterRules) return;
+
+  const ageCat = document.getElementById("ageCategory").value;
+  if (!ageCat) {
+    alert("年齢区分を選択してください。");
+    return;
+  }
+
+  const cat = document.getElementById("category").value;
+  if (!cat) {
+    alert("所得区分・限度区分を選択してください。");
+    return;
+  }
+
+  const costInput = document.getElementById("medicalCost").value;
+  if (!costInput || Number(costInput) <= 0) {
+    alert("想定の医療費総額（10割）を入力してください。");
+    return;
+  }
+
+  const month = document.getElementById("treatmentMonth").value;
+  const cost = Number(costInput);
+  const isMultiple = document.getElementById("multiple").value === "3";
+  const isOutpatient = document.getElementById("treatmentType").value === "outpatient";
+
+  const rev = masterRules.revisions.find(r => month >= r.effectiveFrom && month <= r.effectiveTo) || masterRules.revisions[0];
+  const groupKey = (ageCat === "under70") ? "under70" : "over70";
+  const rule = rev[groupKey][cat];
+
+  let cap = 0;
+  let baseFormula = "";
+
+  if (rule.baseCap !== undefined) {
+    cap = rule.baseCap;
+    if (rule.threshold > 0 && cost > rule.threshold) {
+      cap += Math.floor((cost - rule.threshold) * rule.rate);
+      baseFormula = `${rule.baseCap.toLocaleString()}円 + (総医療費 - ${rule.threshold.toLocaleString()}円) × 1%`;
+    } else {
+      baseFormula = `${rule.baseCap.toLocaleString()}円（定額）`;
+    }
+  } else {
+    cap = isOutpatient ? rule.outpatientCap : rule.householdCap;
+    baseFormula = `${cap.toLocaleString()}円（定額）`;
+  }
+
+  if (isMultiple && rule.multipleCap) {
+    cap = Math.min(cap, rule.multipleCap);
+    baseFormula += ` ➔ 多数回該当適用で定額【${rule.multipleCap.toLocaleString()}円】（据え置き）`;
+  }
+
+  const normalBurden = Math.floor(cost * rule.copayRate);
+  const actualCap = Math.min(cap, normalBurden);
+  const saved = Math.max(0, normalBurden - actualCap);
+
+  document.getElementById("result").style.display = "block";
+  document.getElementById("resultPrice").textContent = `約 ${actualCap.toLocaleString()} 円`;
+  document.getElementById("resultMessage").innerHTML = saved > 0
+    ? `通常の自己負担額より<br><strong>${saved.toLocaleString()}円</strong> 軽くなります`
+    : "通常の自己負担額が上限額を下回っています。";
+  document.getElementById("baseFormulaText").textContent = baseFormula;
+
+  document.getElementById("calculationDetail").innerHTML = `
+    <p><strong>総医療費（10割）:</strong> ${cost.toLocaleString()}円</p>
+    <p><strong>窓口負担目安（${Math.round(rule.copayRate * 10)}割）:</strong> ${normalBurden.toLocaleString()}円</p>
+    <p><strong>高額療養費月額上限:</strong> ${cap.toLocaleString()}円</p>
+  `;
+
+  if (rule.yearlyCap) {
+    document.getElementById("yearlyInfo").innerHTML = `
+      <strong>💡 新設：年間上限について（2026年8月〜）</strong><br>
+      該当区分の年間上限額は <strong>${rule.yearlyCap.toLocaleString()}円</strong> です。<br>
+      当年8月〜翌年7月の1年間の自己負担合計がこの額を超えた場合、超えた分が後日還付されます。
+    `;
+  } else {
+    document.getElementById("yearlyInfo").innerHTML = "";
+  }
+
+  document.getElementById("result").scrollIntoView({ behavior: "smooth" });
+}
+
+function toggleDebug() {
+  const d = document.getElementById("debugText");
+  d.style.display = d.style.display === "block" ? "none" : "block";
+}
+
+document.getElementById("cameraInput").addEventListener("change", e => handleImageFile(e.target.files[0]));
+document.getElementById("fileInput").addEventListener("change", e => handleImageFile(e.target.files[0]));
+
+initWarekiSelects();
+loadMasterRules();
+</script>
+</body>
+</html>
