@@ -161,6 +161,7 @@ hr { border: 0; border-top: 1px solid #ddd; margin: 20px 0; }
   <!-- DEBUG -->
   <div class="card">
     <button class="secondary" onclick="toggleDebug()">OCRの解析テキスト原文を見る</button>
+    <button id="copyDebugBtn" class="secondary" style="display:none; margin-top:8px; background:#e2e3e5; color:#383d41;" onclick="copyDebugText()">📋 原文テキストをコピーする</button>
     <pre id="debugText"></pre>
   </div>
 </div>
@@ -305,7 +306,6 @@ async function handleImageFile(file) {
   }
 }
 
-// 指摘に基づく画像前処理（二値化を排除し、Canvasフィルターでグレースケール＋コントラスト強調のみ適用）
 function preprocessImage(file) {
   return new Promise((resolve, reject) => {
     const img = new Image();
@@ -318,8 +318,6 @@ function preprocessImage(file) {
       
       ctx.imageSmoothingEnabled = true;
       ctx.imageSmoothingQuality = "high";
-      
-      // コントラスト調整フィルターの適用
       ctx.filter = "grayscale(100%) contrast(180%)";
       ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
       
@@ -337,14 +335,23 @@ async function runOCR(canvas) {
     ocrWorker = await Tesseract.createWorker("jpn");
   }
 
+  // 指摘①: 散在テキスト・表形式に強い SPARSE_TEXT へ戻す
   await ocrWorker.setParameters({
-    tessedit_pageseg_mode: Tesseract.PSM.SINGLE_BLOCK,
+    tessedit_pageseg_mode: Tesseract.PSM.SPARSE_TEXT,
   });
 
   progress.textContent = "解析中…";
   const result = await ocrWorker.recognize(canvas);
   lastOCRText = result.data.text || "";
+  
+  // デバッグテキスト表示
   document.getElementById("debugText").textContent = lastOCRText;
+  document.getElementById("copyDebugBtn").style.display = "block";
+  
+  // 指摘⑤: F12開発者ツールのConsoleにRAWテキストを出力
+  console.log("=== OCR RAW TEXT ===");
+  console.log(lastOCRText);
+
   parseOCRResult(lastOCRText);
   progress.textContent = "";
   document.getElementById("reparseBtn").style.display = "block";
@@ -352,14 +359,22 @@ async function runOCR(canvas) {
 }
 
 function parseOCRResult(rawText) {
-  // 全角英数の標準化および安全な個別認識補正（過剰な置換を防止）
+  // 指摘③: OCR誤認識・類似文字の置換処理を大幅強化
   let normalizedText = rawText
     .replace(/[０-９]/g, s => String.fromCharCode(s.charCodeAt(0) - 0xfee0))
-    .replace(/区\s*II/g, "区Ⅱ")
-    .replace(/区\s*I/g, "区Ⅰ")
-    .replace(/信和/g, "令和");
+    .replace(/信和/g, "令和")
+    // 区Ⅲ パターン
+    .replace(/区\s*III/gi, "区Ⅲ")
+    .replace(/区\s*lll/gi, "区Ⅲ")
+    .replace(/区\s*3/g, "区Ⅲ")
+    // 区Ⅱ パターン
+    .replace(/区\s*II/gi, "区Ⅱ")
+    .replace(/区\s*11/g, "区Ⅱ")
+    .replace(/区\s*2/g, "区Ⅱ")
+    // 区Ⅰ パターン
+    .replace(/区\s*I/gi, "区Ⅰ")
+    .replace(/区\s*1/g, "区Ⅰ");
 
-  // 行単位に分割（改行構造を保持）
   const lines = normalizedText.split(/\r?\n/).map(l => l.trim()).filter(l => l.length > 0);
 
   // 1. 生年月日の抽出
@@ -410,34 +425,38 @@ function parseOCRResult(rawText) {
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
 
-    // 負担割合の判定
-    if (line.includes("負担割合") || line.includes("割合")) {
+    // 負担割合の判定（指摘②: 「害・制・則・劃」等の誤読み取りを吸収）
+    if (line.includes("負担割合") || line.includes("割合") || line.includes("負担")) {
       const searchTarget = [line, lines[i + 1] || "", lines[i + 2] || ""].join(" ");
-      const m = searchTarget.match(/([123一二三])\s*割/);
+      const m = searchTarget.match(/([123一二三])\s*(割|害|制|則|劃)/);
       if (m) {
         foundRatio = m[1].replace('一','1').replace('二','2').replace('三','3') + "割";
       }
     }
 
     // 限度区分の判定
-    if (line.includes("限度区分") || line.includes("区分")) {
+    if (line.includes("限度区分") || line.includes("区分") || line.includes("限度")) {
       const searchTarget = [line, lines[i + 1] || "", lines[i + 2] || ""].join(" ");
-      const m = searchTarget.match(/(区\s*[ⅠⅡⅢ123]|区分\s*[アイウエオA-E]|低所得\s*[ⅠⅡ12]|一般)/i);
+      const m = searchTarget.match(/(区\s*[ⅠⅡⅢ123]|区分\s*[アイウエオA-Ea-eワクラつuU]|低所得\s*[ⅠⅡ12]|一般)/i);
       if (m) {
         foundCategory = m[1].replace(/\s+/g, '');
       }
     }
   }
 
-  // フォールバック（行跨ぎ等で検出失敗時の全体検索）
+  // フォールバック（全体検索）
   if (!foundRatio) {
-    const m = normalizedText.match(/([123])\s*割/);
-    if (m) foundRatio = m[1] + "割";
+    const m = normalizedText.match(/([123一二三])\s*(割|害|制|則|劃)/);
+    if (m) foundRatio = m[1].replace('一','1').replace('二','2').replace('三','3') + "割";
   }
   if (!foundCategory) {
-    const m = normalizedText.match(/(区\s*[ⅠⅡⅢ]|区分\s*[アイウエオ])/i);
+    const m = normalizedText.match(/(区\s*[ⅠⅡⅢ]|区分\s*[アイウエオワクラつuU])/i);
     if (m) foundCategory = m[1].replace(/\s+/g, '');
   }
+
+  // 指摘⑤: 解析完了ログの出力
+  console.log("OCR PARSED RATIO:", foundRatio);
+  console.log("OCR PARSED CATEGORY:", foundCategory);
 
   document.getElementById("ocrRatio").value = foundRatio;
   document.getElementById("ocrCategory").value = foundCategory;
@@ -445,7 +464,6 @@ function parseOCRResult(rawText) {
   updateCategoryFromOCRInputs();
 }
 
-// rules.jsonの実際のキー名（top, high_i, high_ii, middle, low_i, low_ii, general）に合致するよう選択ロジックを修正
 function updateCategoryFromOCRInputs() {
   const ageCat = document.getElementById("ageCategory").value;
   if (!ageCat) return;
@@ -456,26 +474,26 @@ function updateCategoryFromOCRInputs() {
   let targetCategory = "";
 
   if (ageCat === "under70") {
+    // 指摘④: 「区分ウ」のOCR化け（ワ、ク、つ、u、U）の吸収
     if (/区分\s*ア/i.test(catVal)) targetCategory = "top";
     else if (/区分\s*イ/i.test(catVal)) targetCategory = "high";
-    else if (/区分\s*ウ/i.test(catVal)) targetCategory = "middle";
+    else if (/区分\s*(ウ|ワ|ク|u|U|つ)/i.test(catVal)) targetCategory = "middle";
     else if (/区分\s*エ/i.test(catVal)) targetCategory = "low";
     else if (/区分\s*オ/i.test(catVal)) targetCategory = "nonTax";
     else if (catVal || ratioVal) targetCategory = "middle";
   } else {
-    // 70歳以上 / 後期高齢者（負担割合と表記を両方踏まえて判定）
+    // 70歳以上 / 後期高齢者
     const is3割 = /3割/.test(ratioVal);
 
     if (is3割) {
       if (/Ⅲ|3/i.test(catVal)) targetCategory = "top";
       else if (/Ⅱ|2/i.test(catVal)) targetCategory = "high_ii";
       else if (/Ⅰ|1/i.test(catVal)) targetCategory = "high_i";
-      else targetCategory = "high_i"; // 3割のデフォルト
+      else targetCategory = "high_i";
     } else {
-      // 1割・2割負担の場合
-      if (/区\s*Ⅱ|低所得\s*Ⅱ|Ⅱ/i.test(catVal)) targetCategory = "low_ii";
-      else if (/区\s*Ⅰ|低所得\s*Ⅰ|Ⅰ/i.test(catVal)) targetCategory = "low_i";
-      else if (/一般/i.test(catVal) || catVal === "") targetCategory = "middle"; // 制度上の一般区分
+      if (/区\s*Ⅱ|低所得\s*Ⅱ|Ⅱ|2/i.test(catVal)) targetCategory = "low_ii";
+      else if (/区\s*Ⅰ|低所得\s*Ⅰ|Ⅰ|1/i.test(catVal)) targetCategory = "low_i";
+      else if (/一般/i.test(catVal) || catVal === "") targetCategory = "middle";
     }
   }
 
@@ -491,6 +509,7 @@ function reparseOCR() {
 function clearInsuranceInfo() {
   document.getElementById("preview").style.display = "none";
   document.getElementById("debugText").textContent = "";
+  document.getElementById("copyDebugBtn").style.display = "none";
   document.getElementById("reparseBtn").style.display = "none";
   document.getElementById("clearBtn").style.display = "none";
   document.getElementById("ocrRatio").value = "";
@@ -499,6 +518,15 @@ function clearInsuranceInfo() {
   document.getElementById("ageCategory").value = "";
   updateAgeUI();
   document.getElementById("result").style.display = "none";
+}
+
+function copyDebugText() {
+  if (!lastOCRText) return;
+  navigator.clipboard.writeText(lastOCRText).then(() => {
+    alert("OCR解析原文をクリップボードにコピーしました！");
+  }).catch(() => {
+    alert("コピーに失敗しました。手動で選択してください。");
+  });
 }
 
 function calculate() {
