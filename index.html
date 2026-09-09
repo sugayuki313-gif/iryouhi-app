@@ -38,6 +38,10 @@ button { width: 100%; border: 0; border-radius: 12px; padding: 15px; font-size: 
 .yearly-info { background: #fff8e1; border: 1px solid #ffe082; border-radius: 8px; padding: 12px; margin-top: 10px; font-size: .88rem; color: #5d4037; }
 .warning { background: #fff6df; border-left: 5px solid #e3a400; padding: 14px; border-radius: 8px; margin-top: 15px; }
 #debugText { white-space: pre-wrap; word-break: break-word; font-size: .75rem; background: #222; color: #eee; padding: 10px; border-radius: 8px; max-height: 220px; overflow: auto; display: none; }
+.confidence-badge { display: inline-block; font-size: .75rem; font-weight: bold; padding: 2px 8px; border-radius: 10px; margin-left: 4px; }
+.confidence-high { background: #c8e6c9; color: #1b5e20; }
+.confidence-medium { background: #fff9c4; color: #f57f17; }
+.confidence-low { background: #ffccbc; color: #bf360c; }
 .hidden { display: none !important; }
 hr { border: 0; border-top: 1px solid #ddd; margin: 20px 0; }
 </style>
@@ -79,10 +83,12 @@ hr { border: 0; border-top: 1px solid #ddd; margin: 20px 0; }
       <div>
         <label for="ocrRatio">負担割合（OCR読み取り）</label>
         <input id="ocrRatio" type="text" placeholder="例: 1割" oninput="updateCategoryFromOCRInputs()">
+        <span id="ratioConfidence" class="confidence-badge" style="display:none;"></span>
       </div>
       <div>
         <label for="ocrCategory">限度区分表記（OCR読み取り）</label>
         <input id="ocrCategory" type="text" placeholder="例: 区Ⅱ, 区分ウ" oninput="updateCategoryFromOCRInputs()">
+        <span id="categoryConfidence" class="confidence-badge" style="display:none;"></span>
       </div>
     </div>
 
@@ -100,6 +106,7 @@ hr { border: 0; border-top: 1px solid #ddd; margin: 20px 0; }
       <select id="birthMonth" onchange="onBirthdateChange()" style="flex: 1.8;"></select>
       <select id="birthDay" onchange="onBirthdateChange()" style="flex: 1.8;"></select>
     </div>
+    <span id="birthdateConfidence" class="confidence-badge" style="display:none; margin-top:4px; display: inline-block;"></span>
 
     <label for="calculatedAge">年齢（自動計算）</label>
     <input id="calculatedAge" type="text" readonly placeholder="生年月日を選択すると自動計算されます" style="background:#f0f0f0;">
@@ -162,6 +169,7 @@ hr { border: 0; border-top: 1px solid #ddd; margin: 20px 0; }
   <div class="card">
     <button class="secondary" onclick="toggleDebug()">OCRの解析テキスト原文を見る</button>
     <button id="copyDebugBtn" class="secondary" style="display:none; margin-top:8px; background:#e2e3e5; color:#383d41;" onclick="copyDebugText()">📋 原文テキストをコピーする</button>
+    <div id="debugInfo" style="display:none; margin-top:12px; font-size:.85rem; background:#f5f5f5; padding:10px; border-radius:8px;"></div>
     <pre id="debugText"></pre>
   </div>
 </div>
@@ -170,6 +178,8 @@ hr { border: 0; border-top: 1px solid #ddd; margin: 20px 0; }
 let masterRules = null;
 let lastOCRText = "";
 let ocrWorker = null;
+let ocrConfidenceScores = { birthdate: 0, ratio: 0, category: 0 };
+let isProcessingOCR = false;
 
 async function loadMasterRules() {
   try {
@@ -179,6 +189,23 @@ async function loadMasterRules() {
   } catch (e) {
     alert("制度マスタ(rules.json)の読み込みに失敗しました。");
   }
+}
+
+function initOCRWorker() {
+  return new Promise((resolve, reject) => {
+    if (ocrWorker) {
+      resolve(ocrWorker);
+      return;
+    }
+    
+    const startTime = performance.now();
+    Tesseract.createWorker("jpn").then(worker => {
+      const initTime = (performance.now() - startTime).toFixed(0);
+      console.log(`[OCR] Worker initialized in ${initTime}ms`);
+      ocrWorker = worker;
+      resolve(worker);
+    }).catch(reject);
+  });
 }
 
 function initWarekiSelects() {
@@ -290,178 +317,478 @@ function updateAgeUI() {
 }
 
 async function handleImageFile(file) {
-  if (!file) return;
+  if (!file || isProcessingOCR) return;
+  
+  isProcessingOCR = true;
   const imageURL = URL.createObjectURL(file);
   const preview = document.getElementById("preview");
-  preview.src = imageURL; preview.style.display = "block";
+  preview.src = imageURL;
+  preview.style.display = "block";
 
-  document.getElementById("ocrProgress").innerHTML = "<span style='color:#555;'>画像前処理中…</span>";
+  document.getElementById("ocrProgress").innerHTML = "<span style='color:#555;'>🔄 初期化中…</span>";
+  
   try {
-    const canvas = await preprocessImage(file);
+    await initOCRWorker();
+    document.getElementById("ocrProgress").innerHTML = "<span style='color:#555;'>🖼️ 画像最適化中…</span>";
+    
+    const canvas = await preprocessImageAdvanced(file);
+    
+    document.getElementById("ocrProgress").innerHTML = "<span style='color:#555;'>🔍 解析中…</span>";
     await runOCR(canvas);
   } catch (e) {
-    alert("読み取りに失敗しました。");
+    console.error("OCR error:", e);
+    document.getElementById("ocrProgress").innerHTML = "<span style='color:#c62828;'>❌ 読み取りに失敗しました。別の角度で再度お試しください。</span>";
   } finally {
+    isProcessingOCR = false;
     URL.revokeObjectURL(imageURL);
   }
 }
 
-// 画像前処理：高コントラストフィルタを解除し、解像度拡大のみで文字飛ばしを防ぐ
-function preprocessImage(file) {
+// 高度な画像前処理：複数の最適化テクニックを組み合わせ
+async function preprocessImageAdvanced(file) {
   return new Promise((resolve, reject) => {
     const img = new Image();
     const url = URL.createObjectURL(file);
     img.onload = () => {
-      const canvas = document.createElement("canvas");
-      canvas.width = img.naturalWidth * 2;
-      canvas.height = img.naturalHeight * 2;
-      const ctx = canvas.getContext("2d");
-      
-      ctx.imageSmoothingEnabled = true;
-      ctx.imageSmoothingQuality = "high";
-      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-      
-      URL.revokeObjectURL(url);
-      resolve(canvas);
+      try {
+        const canvas = document.createElement("canvas");
+        
+        // 解像度判定：低い場合のみアップスケール
+        const minDimension = Math.min(img.naturalWidth, img.naturalHeight);
+        const scale = minDimension < 800 ? 2 : 1;
+        
+        canvas.width = img.naturalWidth * scale;
+        canvas.height = img.naturalHeight * scale;
+        const ctx = canvas.getContext("2d");
+        
+        // 高品質スケーリング
+        ctx.imageSmoothingEnabled = true;
+        ctx.imageSmoothingQuality = "high";
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        
+        // 画像データ取得
+        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        const data = imageData.data;
+        
+        // 適応的コントラスト調整（CLAHE的な処理）
+        enhanceContrast(data, canvas.width, canvas.height);
+        
+        ctx.putImageData(imageData, 0, 0);
+        URL.revokeObjectURL(url);
+        resolve(canvas);
+      } catch (e) {
+        reject(e);
+      }
     };
-    img.onerror = () => reject();
+    img.onerror = () => {
+      URL.revokeObjectURL(url);
+      reject(new Error("Image load failed"));
+    };
     img.src = url;
   });
 }
 
+// コントラスト強化処理
+function enhanceContrast(data, width, height) {
+  // グレースケール化＆ヒストグラム計算
+  const histogram = new Uint32Array(256);
+  const gray = new Uint8Array(data.length / 4);
+  
+  for (let i = 0, j = 0; i < data.length; i += 4, j++) {
+    const r = data[i], g = data[i + 1], b = data[i + 2];
+    const grayVal = Math.round(0.299 * r + 0.587 * g + 0.114 * b);
+    gray[j] = grayVal;
+    histogram[grayVal]++;
+  }
+  
+  // OTSU法による最適閾値計算
+  const threshold = calculateOtsuThreshold(histogram);
+  
+  // 二値化＆軽微なコントラスト向上
+  for (let i = 0, j = 0; i < data.length; i += 4, j++) {
+    const r = data[i], g = data[i + 1], b = data[i + 2];
+    const grayVal = Math.round(0.299 * r + 0.587 * g + 0.114 * b);
+    
+    // しきい値を基準にした適応的な明るさ調整
+    let enhanced;
+    if (grayVal < threshold) {
+      enhanced = Math.max(0, grayVal - 20);
+    } else {
+      enhanced = Math.min(255, grayVal + 20);
+    }
+    
+    data[i] = enhanced;
+    data[i + 1] = enhanced;
+    data[i + 2] = enhanced;
+  }
+}
+
+function calculateOtsuThreshold(histogram) {
+  let sum = 0;
+  for (let i = 0; i < 256; i++) sum += histogram[i];
+  
+  let sumB = 0, wB = 0, maxVar = 0, threshold = 0;
+  for (let i = 0; i < 256; i++) {
+    wB += histogram[i];
+    if (wB === 0) continue;
+    
+    sumB += i * histogram[i];
+    const wF = sum - wB;
+    if (wF === 0) break;
+    
+    const mB = sumB / wB;
+    const mF = (sum * sum / sum - sumB) / wF;
+    const varBetween = wB * wF * (mB - mF) * (mB - mF);
+    
+    if (varBetween > maxVar) {
+      maxVar = varBetween;
+      threshold = i;
+    }
+  }
+  return threshold || 128;
+}
+
 async function runOCR(canvas) {
   const progress = document.getElementById("ocrProgress");
+  
   if (!ocrWorker) {
-    ocrWorker = await Tesseract.createWorker("jpn");
+    await initOCRWorker();
   }
 
   await ocrWorker.setParameters({
-    tessedit_pageseg_mode: Tesseract.PSM.SPARSE_TEXT,
+    tessedit_pageseg_mode: Tesseract.PSM.AUTO,
+    tesseract_config_values: {
+      preserve_interword_spaces: '1',
+    }
   });
 
-  progress.innerHTML = "<span style='color:#555;'>解析中…</span>";
+  const startTime = performance.now();
   const result = await ocrWorker.recognize(canvas);
   lastOCRText = result.data.text || "";
+  const ocrTime = (performance.now() - startTime).toFixed(0);
   
   document.getElementById("debugText").textContent = lastOCRText;
   document.getElementById("copyDebugBtn").style.display = "block";
   
+  console.log(`[OCR] Recognized text in ${ocrTime}ms (confidence: ${result.data.confidence?.toFixed(1)}%)`);
   console.log("=== OCR RAW TEXT ===");
   console.log(lastOCRText);
 
-  parseOCRResult(lastOCRText);
+  parseOCRResultAdvanced(lastOCRText);
   document.getElementById("reparseBtn").style.display = "block";
   document.getElementById("clearBtn").style.display = "block";
 }
 
-function parseOCRResult(rawText) {
-  let normalizedText = rawText
-    .replace(/[０-９]/g, s => String.fromCharCode(s.charCodeAt(0) - 0xfee0))
-    .replace(/信和/g, "令和")
-    .replace(/区\s*III/gi, "区Ⅲ")
-    .replace(/区\s*lll/gi, "区Ⅲ")
-    .replace(/区\s*3/g, "区Ⅲ")
-    .replace(/区\s*II/gi, "区Ⅱ")
-    .replace(/区\s*11/g, "区Ⅱ")
-    .replace(/区\s*2/g, "区Ⅱ")
-    .replace(/区\s*I/gi, "区Ⅰ")
-    .replace(/区\s*1/g, "区Ⅰ");
-
+// 構造化・信頼度スコア付きパース
+function parseOCRResultAdvanced(rawText) {
+  const normalizedText = normalizeText(rawText);
   const lines = normalizedText.split(/\r?\n/).map(l => l.trim()).filter(l => l.length > 0);
 
-  // 1. 生年月日の抽出
-  const warekiRegex = /(明治|大正|昭和|平成|令和|昭|平|令|[MTSHR])\s*(\d{1,2})\s*年\s*(\d{1,2})\s*月\s*(\d{1,2})\s*日?/;
-  const ignoreKeywords = ["交付", "有効", "取得", "発効", "該当"];
+  const results = {
+    birthdate: { era: null, year: null, month: null, day: null, confidence: 0 },
+    ratio: { value: "", confidence: 0 },
+    category: { value: "", confidence: 0 }
+  };
 
+  // 生年月日抽出
+  extractBirthdateStructured(lines, normalizedText, results);
+  
+  // 負担割合抽出
+  extractRatioStructured(lines, normalizedText, results);
+  
+  // 限度区分抽出
+  extractCategoryStructured(lines, normalizedText, results);
+
+  // UI更新
+  applyParsedResults(results);
+  displayDebugInfo(results);
+}
+
+function normalizeText(rawText) {
+  return rawText
+    .replace(/[０-９]/g, s => String.fromCharCode(s.charCodeAt(0) - 0xfee0))
+    .replace(/[ａ-ｚＡ-Ｚ]/g, s => String.fromCharCode(s.charCodeAt(0) - 0xfee0))
+    .replace(/信和/g, "令和")
+    .replace(/([^区分])I(?!I)/gi, "$1Ⅰ")
+    .replace(/([^区分])II(?!I)/gi, "$1Ⅱ")
+    .replace(/([^区分])III/gi, "$1Ⅲ")
+    .replace(/区\s*lll/gi, "区Ⅲ")
+    .replace(/区\s*ll/gi, "区Ⅱ")
+    .replace(/区\s*l(?!l)/gi, "区Ⅰ")
+    .replace(/\s+/g, ' ');
+}
+
+function extractBirthdateStructured(lines, fullText, results) {
+  const patterns = [
+    /(昭和|平成|令和|[SHTR])[\s]?(\d{1,2})[\s]?年[\s]?(\d{1,2})[\s]?月[\s]?(\d{1,2})[\s]?日?/gi,
+    /(\d{4})[\s]?年[\s]?(\d{1,2})[\s]?月[\s]?(\d{1,2})[\s]?日?/g,
+  ];
+  
+  const ignorePatterns = [
+    /([有交付取発該]|資格|有効期限|カード裏面)/,
+  ];
+
+  // パターン1: 和暦
+  for (const line of lines) {
+    if (ignorePatterns.some(p => p.test(line))) continue;
+    
+    let match;
+    while ((match = patterns[0].exec(line)) !== null) {
+      const eraStr = match[1];
+      const year = parseInt(match[2]);
+      const month = parseInt(match[3]);
+      const day = parseInt(match[4]);
+
+      if (isValidDate(year, month, day) && isValidAge(eraStr, year)) {
+        results.birthdate = {
+          era: mapEraCode(eraStr),
+          year, month, day,
+          confidence: 95
+        };
+        return;
+      }
+    }
+  }
+
+  // パターン2: 西暦（フォールバック）
+  for (const line of lines) {
+    if (ignorePatterns.some(p => p.test(line))) continue;
+    
+    let match;
+    while ((match = patterns[1].exec(line)) !== null) {
+      const seirekiYear = parseInt(match[1]);
+      const month = parseInt(match[2]);
+      const day = parseInt(match[3]);
+
+      if (isValidDate(seirekiYear, month, day) && seirekiYear >= 1920 && seirekiYear <= 2030) {
+        const era = convertSeirekiToWarekiCode(seirekiYear);
+        const warekiYear = seirekiYear - warekiBaseYear(era.era);
+        
+        results.birthdate = {
+          era: era.era,
+          year: warekiYear,
+          month, day,
+          confidence: 85
+        };
+        return;
+      }
+    }
+  }
+}
+
+function extractRatioStructured(lines, fullText, results) {
+  const keywordPatterns = [
+    /負担割合|割合|患者負担/i,
+  ];
+
+  // キーワード周辺から検索
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
-    if (ignoreKeywords.some(kw => line.includes(kw))) continue;
+    if (!keywordPatterns.some(p => p.test(line))) continue;
 
-    const match = line.match(warekiRegex);
+    const contextText = [
+      lines[i - 1] || "",
+      line,
+      lines[i + 1] || "",
+      lines[i + 2] || ""
+    ].join(" ");
+
+    // 1割, 2割, 3割のパターン
+    const match = contextText.match(/([123一二三])[\s]?割/);
     if (match) {
-      let eraStr = match[1];
-      let yearNum = Number(match[2]);
-      let monthNum = Number(match[3]);
-      let dayNum = Number(match[4]);
-
-      let eraCode = "S";
-      if (/平成|平|H/.test(eraStr)) eraCode = "H";
-      else if (/令和|令|R/.test(eraStr)) eraCode = "R";
-      else if (/大正|T/.test(eraStr)) eraCode = "T";
-      else if (/明治|M/.test(eraStr)) eraCode = "M";
-
-      const seirekiYear = convertWarekiToSeireki(eraCode, yearNum);
-      if (!seirekiYear) continue;
-
-      const birthDate = new Date(seirekiYear, monthNum - 1, dayNum);
-      const today = new Date();
-      let age = today.getFullYear() - birthDate.getFullYear();
-      const m = today.getMonth() - birthDate.getMonth();
-      if (m < 0 || (m === 0 && today.getDate() < birthDate.getDate())) age--;
-
-      if (age >= 0 && age <= 115) {
-        document.getElementById("birthEra").value = eraCode;
-        document.getElementById("birthYear").value = yearNum;
-        document.getElementById("birthMonth").value = monthNum;
-        document.getElementById("birthDay").value = dayNum;
-        onBirthdateChange();
-        break;
-      }
+      results.ratio = {
+        value: match[1].replace(/一/g, '1').replace(/二/g, '2').replace(/三/g, '3') + "割",
+        confidence: 90
+      };
+      return;
     }
   }
 
-  // 2. 負担割合と限度区分の抽出
-  let foundRatio = "";
-  let foundCategory = "";
+  // 全文検索（フォールバック）
+  const globalMatch = fullText.match(/([123一二三])[\s]?割/);
+  if (globalMatch) {
+    results.ratio = {
+      value: globalMatch[1].replace(/一/g, '1').replace(/二/g, '2').replace(/三/g, '3') + "割",
+      confidence: 70
+    };
+  }
+}
 
+function extractCategoryStructured(lines, fullText, results) {
+  const categoryKeywords = [
+    /限度区分|適用|区分|限度/i,
+  ];
+
+  // 高精度パターン定義
+  const categoryPatterns = [
+    { regex: /[\s]*区[\s]?分[\s]?[ア](?![イウエオ])/i, value: "区分ア", confidence: 95 },
+    { regex: /[\s]*区[\s]?分[\s]?[イ](?![ウエオ])/i, value: "区分イ", confidence: 95 },
+    { regex: /[\s]*区[\s]?分[\s]?[ウ](?![エオ])/i, value: "区分ウ", confidence: 95 },
+    { regex: /[\s]*区[\s]?分[\s]?[エ](?![オ])/i, value: "区分エ", confidence: 95 },
+    { regex: /[\s]*区[\s]?分[\s]?[オ]/i, value: "区分オ", confidence: 95 },
+    
+    { regex: /[\s]*区[\s]?Ⅰ(?!Ⅱ|Ⅲ)/i, value: "区Ⅰ", confidence: 90 },
+    { regex: /[\s]*区[\s]?Ⅱ(?!Ⅲ)/i, value: "区Ⅱ", confidence: 90 },
+    { regex: /[\s]*区[\s]?Ⅲ/i, value: "区Ⅲ", confidence: 90 },
+    
+    { regex: /[\s]*低所得[\s]?Ⅰ/i, value: "低所得Ⅰ", confidence: 90 },
+    { regex: /[\s]*低所得[\s]?Ⅱ/i, value: "低所得Ⅱ", confidence: 90 },
+    
+    { regex: /[\s]*一般(?!的)/i, value: "一般", confidence: 85 },
+  ];
+
+  // キーワード周辺から検索
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
+    if (!categoryKeywords.some(p => p.test(line))) continue;
 
-    if (line.includes("負担割合") || line.includes("割合") || line.includes("負担")) {
-      const searchTarget = [line, lines[i + 1] || "", lines[i + 2] || ""].join(" ");
-      const m = searchTarget.match(/([123一二三])\s*(割|害|制|則|劃)/);
-      if (m) {
-        foundRatio = m[1].replace('一','1').replace('二','2').replace('三','3') + "割";
+    const contextText = [
+      lines[i - 1] || "",
+      line,
+      lines[i + 1] || "",
+      lines[i + 2] || ""
+    ].join(" ");
+
+    for (const pattern of categoryPatterns) {
+      if (pattern.regex.test(contextText)) {
+        results.category = {
+          value: pattern.value,
+          confidence: pattern.confidence
+        };
+        return;
       }
     }
+  }
 
-    if (line.includes("限度区分") || line.includes("区分") || line.includes("限度")) {
-      const searchTarget = [line, lines[i + 1] || "", lines[i + 2] || ""].join(" ");
-      const m = searchTarget.match(/(区\s*[ⅠⅡⅢ123]|区分\s*[アイウエオA-Ea-eワクラつuU]|低所得\s*[ⅠⅡ12]|一般)/i);
-      if (m) {
-        foundCategory = m[1].replace(/\s+/g, '');
-      }
+  // 全文検索（フォールバック）
+  for (const pattern of categoryPatterns) {
+    if (pattern.regex.test(fullText)) {
+      results.category = {
+        value: pattern.value,
+        confidence: pattern.confidence - 20
+      };
+      return;
     }
   }
+}
 
-  if (!foundRatio) {
-    const m = normalizedText.match(/([123一二三])\s*(割|害|制|則|劃)/);
-    if (m) foundRatio = m[1].replace('一','1').replace('二','2').replace('三','3') + "割";
-  }
-  if (!foundCategory) {
-    const m = normalizedText.match(/(区\s*[ⅠⅡⅢ]|区分\s*[アイウエオワクラつuU])/i);
-    if (m) foundCategory = m[1].replace(/\s+/g, '');
-  }
-
-  console.log("OCR PARSED RATIO:", foundRatio);
-  console.log("OCR PARSED CATEGORY:", foundCategory);
-
-  document.getElementById("ocrRatio").value = foundRatio;
-  document.getElementById("ocrCategory").value = foundCategory;
-
-  // 未検出項目のフィードバック表示
+function applyParsedResults(results) {
   const progress = document.getElementById("ocrProgress");
-  if (!foundRatio && !foundCategory) {
-    progress.innerHTML = "<span style='color:#c62828;'>⚠️ 負担割合・区分が検出されませんでした。手動で入力・選択してください。</span>";
-  } else if (!foundRatio) {
-    progress.innerHTML = "<span style='color:#e65100;'>⚠️ 負担割合が検出されませんでした。手動で入力してください。</span>";
-  } else if (!foundCategory) {
-    progress.innerHTML = "<span style='color:#e65100;'>⚠️ 限度区分が検出されませんでした。手動で選択してください。</span>";
-  } else {
-    progress.innerHTML = "<span style='color:#2e7d32;'>✅ 読み取りが完了しました。</span>";
+  let successCount = 0;
+  let statusMessage = "";
+
+  // 生年月日
+  if (results.birthdate.confidence > 0) {
+    document.getElementById("birthEra").value = results.birthdate.era;
+    document.getElementById("birthYear").value = results.birthdate.year;
+    document.getElementById("birthMonth").value = results.birthdate.month;
+    document.getElementById("birthDay").value = results.birthdate.day;
+    onBirthdateChange();
+    
+    updateConfidenceBadge("birthdateConfidence", results.birthdate.confidence);
+    successCount++;
+  }
+
+  // 負担割合
+  if (results.ratio.confidence > 0) {
+    document.getElementById("ocrRatio").value = results.ratio.value;
+    updateConfidenceBadge("ratioConfidence", results.ratio.confidence);
+    successCount++;
+  }
+
+  // 限度区分
+  if (results.category.confidence > 0) {
+    document.getElementById("ocrCategory").value = results.category.value;
+    updateConfidenceBadge("categoryConfidence", results.category.confidence);
+    successCount++;
   }
 
   updateCategoryFromOCRInputs();
+
+  // 結果メッセージ
+  if (successCount === 3) {
+    progress.innerHTML = "<span style='color:#2e7d32;'>✅ 3つの項目すべてを検出しました！</span>";
+  } else if (successCount === 2) {
+    progress.innerHTML = "<span style='color:#558b2f;'>✅ 2つの項目を検出しました。残りの項目を手動で入力してください。</span>";
+  } else if (successCount === 1) {
+    progress.innerHTML = "<span style='color:#f57f17;'>⚠️ 1つの項目のみ検出。手動で確認・補完してください。</span>";
+  } else {
+    progress.innerHTML = "<span style='color:#c62828;'>❌ 項目を検出できませんでした。手動で入力してください。</span>";
+  }
+}
+
+function updateConfidenceBadge(elementId, confidence) {
+  const badge = document.getElementById(elementId);
+  let text, className;
+  
+  if (confidence >= 90) {
+    text = "確実";
+    className = "confidence-high";
+  } else if (confidence >= 70) {
+    text = "推定";
+    className = "confidence-medium";
+  } else {
+    text = "低確実";
+    className = "confidence-low";
+  }
+  
+  badge.textContent = `${text} (${confidence}%)`;
+  badge.className = `confidence-badge ${className}`;
+  badge.style.display = "inline-block";
+}
+
+function displayDebugInfo(results) {
+  const debugInfo = document.getElementById("debugInfo");
+  debugInfo.innerHTML = `
+    <strong>📊 OCR抽出結果（信頼度スコア付き）</strong><br>
+    生年月日: ${results.birthdate.era || "未検出"} ${results.birthdate.year || ""} 年 ${results.birthdate.month || ""} 月 ${results.birthdate.day || ""} 日 → 信頼度 ${results.birthdate.confidence}%<br>
+    負担割合: ${results.ratio.value || "未検出"} → 信頼度 ${results.ratio.confidence}%<br>
+    限度区分: ${results.category.value || "未検出"} → 信頼度 ${results.category.confidence}%
+  `;
+  debugInfo.style.display = "block";
+}
+
+function mapEraCode(eraStr) {
+  if (/平成|平|H/.test(eraStr)) return "H";
+  if (/令和|令|R/.test(eraStr)) return "R";
+  if (/大正|T/.test(eraStr)) return "T";
+  if (/明治|M/.test(eraStr)) return "M";
+  return "S";
+}
+
+function isValidDate(year, month, day) {
+  if (month < 1 || month > 12 || day < 1 || day > 31) return false;
+  if ([4,6,9,11].includes(month) && day > 30) return false;
+  if (month === 2 && day > 29) return false;
+  return true;
+}
+
+function isValidAge(eraStr, year) {
+  const today = new Date();
+  let seirekiYear;
+  
+  if (/昭和|S/.test(eraStr)) seirekiYear = 1925 + year;
+  else if (/平成|H/.test(eraStr)) seirekiYear = 1988 + year;
+  else if (/令和|R/.test(eraStr)) seirekiYear = 2018 + year;
+  else if (/大正|T/.test(eraStr)) seirekiYear = 1911 + year;
+  else if (/明治|M/.test(eraStr)) seirekiYear = 1867 + year;
+  else return false;
+
+  const age = today.getFullYear() - seirekiYear;
+  return age >= 0 && age <= 120;
+}
+
+function convertSeirekiToWarekiCode(seirekiYear) {
+  if (seirekiYear >= 2019) return { era: "R", year: seirekiYear - 2018 };
+  if (seirekiYear >= 1989) return { era: "H", year: seirekiYear - 1988 };
+  if (seirekiYear >= 1926) return { era: "S", year: seirekiYear - 1925 };
+  if (seirekiYear >= 1912) return { era: "T", year: seirekiYear - 1911 };
+  return { era: "M", year: seirekiYear - 1867 };
+}
+
+function warekiBaseYear(era) {
+  const map = { "S": 1925, "H": 1988, "R": 2018, "T": 1911, "M": 1867 };
+  return map[era] || 1925;
 }
 
 function updateCategoryFromOCRInputs() {
@@ -489,8 +816,8 @@ function updateCategoryFromOCRInputs() {
       else if (/Ⅰ|1/i.test(catVal)) targetCategory = "high_i";
       else targetCategory = "high_i";
     } else {
-      if (/区\s*Ⅱ|低所得\s*Ⅱ|Ⅱ|2/i.test(catVal)) targetCategory = "low_ii";
-      else if (/区\s*Ⅰ|低所得\s*Ⅰ|Ⅰ|1/i.test(catVal)) targetCategory = "low_i";
+      if (/低所得\s*Ⅱ|区\s*Ⅱ|Ⅱ|2/i.test(catVal)) targetCategory = "low_ii";
+      else if (/低所得\s*Ⅰ|区\s*Ⅰ|Ⅰ|1/i.test(catVal)) targetCategory = "low_i";
       else if (/一般/i.test(catVal) || catVal === "") targetCategory = "middle";
     }
   }
@@ -501,18 +828,22 @@ function updateCategoryFromOCRInputs() {
 }
 
 function reparseOCR() {
-  if (lastOCRText) parseOCRResult(lastOCRText);
+  if (lastOCRText) parseOCRResultAdvanced(lastOCRText);
 }
 
 function clearInsuranceInfo() {
   document.getElementById("preview").style.display = "none";
   document.getElementById("debugText").textContent = "";
+  document.getElementById("debugInfo").style.display = "none";
   document.getElementById("copyDebugBtn").style.display = "none";
   document.getElementById("reparseBtn").style.display = "none";
   document.getElementById("clearBtn").style.display = "none";
   document.getElementById("ocrProgress").innerHTML = "";
   document.getElementById("ocrRatio").value = "";
   document.getElementById("ocrCategory").value = "";
+  document.getElementById("ratioConfidence").style.display = "none";
+  document.getElementById("categoryConfidence").style.display = "none";
+  document.getElementById("birthdateConfidence").style.display = "none";
   initWarekiSelects();
   document.getElementById("ageCategory").value = "";
   updateAgeUI();
