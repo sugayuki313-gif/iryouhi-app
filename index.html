@@ -44,6 +44,7 @@ button { width: 100%; border: 0; border-radius: 12px; padding: 15px; font-size: 
 .confidence-low { background: #ffccbc; color: #bf360c; }
 .hidden { display: none !important; }
 hr { border: 0; border-top: 1px solid #ddd; margin: 20px 0; }
+.tips { background: #e3f2fd; border-left: 4px solid #1976d2; padding: 10px; border-radius: 4px; font-size: .85rem; margin-top: 8px; color: #0d47a1; }
 </style>
 </head>
 
@@ -63,6 +64,7 @@ hr { border: 0; border-top: 1px solid #ddd; margin: 20px 0; }
   <div class="card">
     <div class="step">① 保険資格情報を撮影（任意）</div>
     <div class="help">保険証・資格確認書などの写真を撮影すると生年月日・負担割合・適用区分が自動読み取りされます。</div>
+    <div class="tips">💡 撮影のコツ：保険証をまっすぐ、照明を当てて、ピントを合わせてください</div>
     <div class="ocr-area">
       <input id="cameraInput" type="file" accept="image/*" capture="environment" class="hidden">
       <input id="fileInput" type="file" accept="image/*" class="hidden">
@@ -343,7 +345,7 @@ async function handleImageFile(file) {
   }
 }
 
-// 高度な画像前処理：複数の最適化テクニックを組み合わせ
+// 保険証に特化した画像前処理
 async function preprocessImageAdvanced(file) {
   return new Promise((resolve, reject) => {
     const img = new Image();
@@ -365,14 +367,11 @@ async function preprocessImageAdvanced(file) {
         ctx.imageSmoothingQuality = "high";
         ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
         
-        // 画像データ取得
+        // 保険証の緑色背景を除去し、テキスト部分を強調
         const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-        const data = imageData.data;
-        
-        // シンプルな明度調整で保険証のテキストを強調
-        enhanceContrast(data);
-        
+        enhanceInsuranceCardImage(imageData.data);
         ctx.putImageData(imageData, 0, 0);
+        
         URL.revokeObjectURL(url);
         resolve(canvas);
       } catch (e) {
@@ -387,18 +386,39 @@ async function preprocessImageAdvanced(file) {
   });
 }
 
-// コントラスト強化処理（簡潔で堅牢）
-function enhanceContrast(data) {
+// 保険証画像の強化処理
+function enhanceInsuranceCardImage(data) {
+  // 緑色（RGB: 低R, 高G, 低B）を検出して白くする
   for (let i = 0; i < data.length; i += 4) {
     const r = data[i], g = data[i + 1], b = data[i + 2];
     const gray = Math.round(0.299 * r + 0.587 * g + 0.114 * b);
     
-    // グレースケール化 + 軽いコントラスト向上（30%強調）
-    const enhanced = Math.min(255, Math.max(0, Math.round(gray * 1.3 - 40)));
+    // 緑背景判定：G > R+50 && G > B+50
+    const isGreenBG = (g > r + 50 && g > b + 50);
     
-    data[i] = enhanced;
-    data[i + 1] = enhanced;
-    data[i + 2] = enhanced;
+    if (isGreenBG) {
+      // 緑背景を白に
+      data[i] = 240;
+      data[i + 1] = 240;
+      data[i + 2] = 240;
+    } else if (gray > 200) {
+      // 明るい部分（背景）を白に
+      data[i] = 255;
+      data[i + 1] = 255;
+      data[i + 2] = 255;
+    } else if (gray < 100) {
+      // 暗い部分（テキスト）をより黒く
+      const enhanced = Math.max(0, gray - 30);
+      data[i] = enhanced;
+      data[i + 1] = enhanced;
+      data[i + 2] = enhanced;
+    } else {
+      // 中間値も調整（コントラスト向上）
+      const enhanced = gray > 150 ? 220 : Math.max(50, gray - 20);
+      data[i] = enhanced;
+      data[i + 1] = enhanced;
+      data[i + 2] = enhanced;
+    }
   }
 }
 
@@ -409,20 +429,45 @@ async function runOCR(canvas) {
     await initOCRWorker();
   }
 
-  // PSM.AUTO で自動的にテキスト領域を検出
-  await ocrWorker.setParameters({
-    tessedit_pageseg_mode: Tesseract.PSM.AUTO
-  });
+  // 複数のセグメンテーションモードを試す
+  const modes = [
+    Tesseract.PSM.AUTO,
+    Tesseract.PSM.SINGLE_BLOCK,
+    Tesseract.PSM.SPARSE_TEXT
+  ];
 
-  const startTime = performance.now();
-  const result = await ocrWorker.recognize(canvas);
-  lastOCRText = result.data.text || "";
-  const ocrTime = (performance.now() - startTime).toFixed(0);
+  let bestResult = null;
+  let bestConfidence = 0;
+
+  for (const mode of modes) {
+    try {
+      await ocrWorker.setParameters({
+        tessedit_pageseg_mode: mode
+      });
+
+      const result = await ocrWorker.recognize(canvas);
+      const confidence = result.data.confidence || 0;
+      
+      console.log(`[OCR] Mode ${mode}: confidence ${confidence}%`);
+
+      if (confidence > bestConfidence) {
+        bestConfidence = confidence;
+        bestResult = result;
+      }
+    } catch (e) {
+      console.error(`Mode ${mode} failed:`, e);
+    }
+  }
+
+  if (!bestResult) {
+    throw new Error("All OCR modes failed");
+  }
+
+  lastOCRText = bestResult.data.text || "";
   
   document.getElementById("debugText").textContent = lastOCRText;
   document.getElementById("copyDebugBtn").style.display = "block";
   
-  console.log(`[OCR] Recognized text in ${ocrTime}ms`);
   console.log("=== OCR RAW TEXT ===");
   console.log(lastOCRText);
 
@@ -431,7 +476,7 @@ async function runOCR(canvas) {
   document.getElementById("clearBtn").style.display = "block";
 }
 
-// 構造化・信頼度スコア付きパース
+// 構造化パース（ロバスト版）
 function parseOCRResultAdvanced(rawText) {
   const normalizedText = normalizeText(rawText);
   const lines = normalizedText.split(/\r?\n/).map(l => l.trim()).filter(l => l.length > 0);
@@ -442,16 +487,10 @@ function parseOCRResultAdvanced(rawText) {
     category: { value: "", confidence: 0 }
   };
 
-  // 生年月日抽出
-  extractBirthdateStructured(lines, normalizedText, results);
-  
-  // 負担割合抽出
-  extractRatioStructured(lines, normalizedText, results);
-  
-  // 限度区分抽出
-  extractCategoryStructured(lines, normalizedText, results);
+  extractBirthdateAdvanced(lines, normalizedText, results);
+  extractRatioAdvanced(lines, normalizedText, results);
+  extractCategoryAdvanced(lines, normalizedText, results);
 
-  // UI更新
   applyParsedResults(results);
   displayDebugInfo(results);
 }
@@ -470,66 +509,74 @@ function normalizeText(rawText) {
     .replace(/\s+/g, ' ');
 }
 
-function extractBirthdateStructured(lines, fullText, results) {
-  // 和暦パターン（最優先）
-  const warekiPattern = /(昭和|平成|令和|S|H|R|T|M)[\s]?(\d{1,2})[\s]?年[\s]?(\d{1,2})[\s]?月[\s]?(\d{1,2})[\s]?日?/i;
-  
-  // キーワード無視リスト
-  const ignorePatterns = [/([有交付取発該者資]|有効期限|カード|裏面)/i];
+function extractBirthdateAdvanced(lines, fullText, results) {
+  // パターン：和暦・西暦の両対応
+  const patterns = [
+    { regex: /(昭和|平成|令和)\s*(\d{1,2})\s*年\s*(\d{1,2})\s*月\s*(\d{1,2})\s*日?/gi, type: 'wareki' },
+    { regex: /([S|H|R|T|M])\s*(\d{1,2})\s*年\s*(\d{1,2})\s*月\s*(\d{1,2})\s*日?/gi, type: 'wareki_abbr' },
+    { regex: /(\d{4})\s*年\s*(\d{1,2})\s*月\s*(\d{1,2})\s*日?/g, type: 'seireki' },
+  ];
 
+  const ignoreKeywords = /([有交付取得発効該当]|有効期限|カード|裏面)/i;
+
+  // 全ラインをスキャン
   for (const line of lines) {
-    if (ignorePatterns.some(p => p.test(line))) continue;
-    
-    const match = line.match(warekiPattern);
-    if (match) {
-      const era = match[1];
-      const year = parseInt(match[2]);
-      const month = parseInt(match[3]);
-      const day = parseInt(match[4]);
+    if (ignoreKeywords.test(line)) continue;
 
-      if (isValidDate(year, month, day) && isValidAge(era, year)) {
-        results.birthdate = {
-          era: mapEraCode(era),
-          year, month, day,
-          confidence: 95
-        };
-        return;
-      }
-    }
-  }
+    for (const pattern of patterns) {
+      let match;
+      const regex = new RegExp(pattern.regex);
+      
+      while ((match = regex.exec(line)) !== null) {
+        if (pattern.type === 'wareki' || pattern.type === 'wareki_abbr') {
+          const era = match[1];
+          const year = parseInt(match[2]);
+          const month = parseInt(match[3]);
+          const day = parseInt(match[4]);
 
-  // 西暦パターン（フォールバック）
-  const seirekiPattern = /(\d{4})[\s]?年[\s]?(\d{1,2})[\s]?月[\s]?(\d{1,2})[\s]?日?/;
-  for (const line of lines) {
-    if (ignorePatterns.some(p => p.test(line))) continue;
-    
-    const match = line.match(seirekiPattern);
-    if (match) {
-      const seirekiYear = parseInt(match[1]);
-      const month = parseInt(match[2]);
-      const day = parseInt(match[3]);
+          if (isValidDate(year, month, day) && isValidAge(era, year)) {
+            results.birthdate = {
+              era: mapEraCode(era),
+              year, month, day,
+              confidence: 95
+            };
+            return;
+          }
+        } else if (pattern.type === 'seireki') {
+          const seirekiYear = parseInt(match[1]);
+          const month = parseInt(match[2]);
+          const day = parseInt(match[3]);
 
-      if (isValidDate(seirekiYear, month, day) && seirekiYear >= 1920 && seirekiYear <= 2030) {
-        const eraInfo = convertSeirekiToWarekiCode(seirekiYear);
-        results.birthdate = {
-          era: eraInfo.era,
-          year: eraInfo.year,
-          month, day,
-          confidence: 85
-        };
-        return;
+          if (isValidDate(seirekiYear, month, day) && seirekiYear >= 1920 && seirekiYear <= 2030) {
+            const eraInfo = convertSeirekiToWarekiCode(seirekiYear);
+            results.birthdate = {
+              era: eraInfo.era,
+              year: eraInfo.year,
+              month, day,
+              confidence: 85
+            };
+            return;
+          }
+        }
       }
     }
   }
 }
 
-function extractRatioStructured(lines, fullText, results) {
-  // 「割合」周辺から検索
+function extractRatioAdvanced(lines, fullText, results) {
+  // キーワード + 複数の数字表現パターン
+  const ratioPatterns = [
+    /([1-3])\s*割/g,              // 1割, 2割, 3割
+    /([一二三])\s*割/g,            // 一割, 二割, 三割
+    /([1-3]割)/g,                  // 1割（スペースなし）
+    /負担割合\s*([1-3])/g,        // 負担割合 1
+  ];
+
+  // 「割」周辺を中心に検索
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
-    if (!/(割合|患者負担|負担)/i.test(line)) continue;
+    if (!/割合|患者負担|負担|割/i.test(line)) continue;
 
-    // この行と前後3行を結合
     const context = [
       lines[i - 2] || "",
       lines[i - 1] || "",
@@ -538,51 +585,55 @@ function extractRatioStructured(lines, fullText, results) {
       lines[i + 2] || ""
     ].join(" ");
 
-    const match = context.match(/([123])\s*割/);
-    if (match) {
-      results.ratio = {
-        value: match[1] + "割",
-        confidence: 90
-      };
-      return;
+    for (const pattern of ratioPatterns) {
+      const match = context.match(pattern);
+      if (match) {
+        const num = match[1].replace(/一/g, '1').replace(/二/g, '2').replace(/三/g, '3');
+        if (/[123]/.test(num)) {
+          results.ratio = {
+            value: num + "割",
+            confidence: 90
+          };
+          return;
+        }
+      }
     }
   }
 
   // 全文検索（フォールバック）
-  const match = fullText.match(/([123])\s*割/);
-  if (match) {
-    results.ratio = {
-      value: match[1] + "割",
-      confidence: 70
-    };
+  for (const pattern of ratioPatterns) {
+    const match = fullText.match(pattern);
+    if (match) {
+      const num = match[1].replace(/一/g, '1').replace(/二/g, '2').replace(/三/g, '3');
+      if (/[123]/.test(num)) {
+        results.ratio = {
+          value: num + "割",
+          confidence: 65
+        };
+        return;
+      }
+    }
   }
 }
 
-function extractCategoryStructured(lines, fullText, results) {
-  // パターン定義（70歳未満と70歳以上）
-  const patterns70under = [
+function extractCategoryAdvanced(lines, fullText, results) {
+  const categoryPatterns = [
     { regex: /区\s*分\s*[ア]/i, value: "区分ア", conf: 95 },
     { regex: /区\s*分\s*[イ]/i, value: "区分イ", conf: 95 },
     { regex: /区\s*分\s*[ウ]/i, value: "区分ウ", conf: 95 },
     { regex: /区\s*分\s*[エ]/i, value: "区分エ", conf: 95 },
     { regex: /区\s*分\s*[オ]/i, value: "区分オ", conf: 95 },
-  ];
-
-  const patterns70over = [
     { regex: /区\s*Ⅲ/i, value: "区Ⅲ", conf: 90 },
     { regex: /区\s*Ⅱ/i, value: "区Ⅱ", conf: 90 },
     { regex: /区\s*Ⅰ/i, value: "区Ⅰ", conf: 90 },
     { regex: /低所得\s*Ⅱ/i, value: "低所得Ⅱ", conf: 90 },
     { regex: /低所得\s*Ⅰ/i, value: "低所得Ⅰ", conf: 90 },
-    { regex: /一般(?!的|)/i, value: "一般", conf: 85 },
+    { regex: /一般(?!的)/i, value: "一般", conf: 85 },
   ];
 
-  const allPatterns = [...patterns70under, ...patterns70over];
-
-  // 「限度区分」周辺から検索
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
-    if (!/限度|区分|適用/i.test(line)) continue;
+    if (!/限度|区分|適用|区/i.test(line)) continue;
 
     const context = [
       lines[i - 2] || "",
@@ -592,7 +643,7 @@ function extractCategoryStructured(lines, fullText, results) {
       lines[i + 2] || ""
     ].join(" ");
 
-    for (const pattern of allPatterns) {
+    for (const pattern of categoryPatterns) {
       if (pattern.regex.test(context)) {
         results.category = {
           value: pattern.value,
@@ -603,8 +654,8 @@ function extractCategoryStructured(lines, fullText, results) {
     }
   }
 
-  // 全文検索（フォールバック）
-  for (const pattern of allPatterns) {
+  // 全文検索
+  for (const pattern of categoryPatterns) {
     if (pattern.regex.test(fullText)) {
       results.category = {
         value: pattern.value,
@@ -619,26 +670,22 @@ function applyParsedResults(results) {
   const progress = document.getElementById("ocrProgress");
   let successCount = 0;
 
-  // 生年月日
   if (results.birthdate.confidence > 0) {
     document.getElementById("birthEra").value = results.birthdate.era;
     document.getElementById("birthYear").value = results.birthdate.year;
     document.getElementById("birthMonth").value = results.birthdate.month;
     document.getElementById("birthDay").value = results.birthdate.day;
     onBirthdateChange();
-    
     updateConfidenceBadge("birthdateConfidence", results.birthdate.confidence);
     successCount++;
   }
 
-  // 負担割合
   if (results.ratio.confidence > 0) {
     document.getElementById("ocrRatio").value = results.ratio.value;
     updateConfidenceBadge("ratioConfidence", results.ratio.confidence);
     successCount++;
   }
 
-  // 限度区分
   if (results.category.confidence > 0) {
     document.getElementById("ocrCategory").value = results.category.value;
     updateConfidenceBadge("categoryConfidence", results.category.confidence);
@@ -647,7 +694,6 @@ function applyParsedResults(results) {
 
   updateCategoryFromOCRInputs();
 
-  // 結果メッセージ
   if (successCount === 3) {
     progress.innerHTML = "<span style='color:#2e7d32;'>✅ 3つの項目すべてを検出しました！</span>";
   } else if (successCount === 2) {
