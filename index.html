@@ -178,7 +178,6 @@ hr { border: 0; border-top: 1px solid #ddd; margin: 20px 0; }
 let masterRules = null;
 let lastOCRText = "";
 let ocrWorker = null;
-let ocrConfidenceScores = { birthdate: 0, ratio: 0, category: 0 };
 let isProcessingOCR = false;
 
 async function loadMasterRules() {
@@ -370,8 +369,8 @@ async function preprocessImageAdvanced(file) {
         const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
         const data = imageData.data;
         
-        // 適応的コントラスト調整（CLAHE的な処理）
-        enhanceContrast(data, canvas.width, canvas.height);
+        // シンプルな明度調整で保険証のテキストを強調
+        enhanceContrast(data);
         
         ctx.putImageData(imageData, 0, 0);
         URL.revokeObjectURL(url);
@@ -388,64 +387,19 @@ async function preprocessImageAdvanced(file) {
   });
 }
 
-// コントラスト強化処理
-function enhanceContrast(data, width, height) {
-  // グレースケール化＆ヒストグラム計算
-  const histogram = new Uint32Array(256);
-  const gray = new Uint8Array(data.length / 4);
-  
-  for (let i = 0, j = 0; i < data.length; i += 4, j++) {
+// コントラスト強化処理（簡潔で堅牢）
+function enhanceContrast(data) {
+  for (let i = 0; i < data.length; i += 4) {
     const r = data[i], g = data[i + 1], b = data[i + 2];
-    const grayVal = Math.round(0.299 * r + 0.587 * g + 0.114 * b);
-    gray[j] = grayVal;
-    histogram[grayVal]++;
-  }
-  
-  // OTSU法による最適閾値計算
-  const threshold = calculateOtsuThreshold(histogram);
-  
-  // 二値化＆軽微なコントラスト向上
-  for (let i = 0, j = 0; i < data.length; i += 4, j++) {
-    const r = data[i], g = data[i + 1], b = data[i + 2];
-    const grayVal = Math.round(0.299 * r + 0.587 * g + 0.114 * b);
+    const gray = Math.round(0.299 * r + 0.587 * g + 0.114 * b);
     
-    // しきい値を基準にした適応的な明るさ調整
-    let enhanced;
-    if (grayVal < threshold) {
-      enhanced = Math.max(0, grayVal - 20);
-    } else {
-      enhanced = Math.min(255, grayVal + 20);
-    }
+    // グレースケール化 + 軽いコントラスト向上（30%強調）
+    const enhanced = Math.min(255, Math.max(0, Math.round(gray * 1.3 - 40)));
     
     data[i] = enhanced;
     data[i + 1] = enhanced;
     data[i + 2] = enhanced;
   }
-}
-
-function calculateOtsuThreshold(histogram) {
-  let sum = 0;
-  for (let i = 0; i < 256; i++) sum += histogram[i];
-  
-  let sumB = 0, wB = 0, maxVar = 0, threshold = 0;
-  for (let i = 0; i < 256; i++) {
-    wB += histogram[i];
-    if (wB === 0) continue;
-    
-    sumB += i * histogram[i];
-    const wF = sum - wB;
-    if (wF === 0) break;
-    
-    const mB = sumB / wB;
-    const mF = (sum * sum / sum - sumB) / wF;
-    const varBetween = wB * wF * (mB - mF) * (mB - mF);
-    
-    if (varBetween > maxVar) {
-      maxVar = varBetween;
-      threshold = i;
-    }
-  }
-  return threshold || 128;
 }
 
 async function runOCR(canvas) {
@@ -455,11 +409,9 @@ async function runOCR(canvas) {
     await initOCRWorker();
   }
 
+  // PSM.AUTO で自動的にテキスト領域を検出
   await ocrWorker.setParameters({
-    tessedit_pageseg_mode: Tesseract.PSM.AUTO,
-    tesseract_config_values: {
-      preserve_interword_spaces: '1',
-    }
+    tessedit_pageseg_mode: Tesseract.PSM.AUTO
   });
 
   const startTime = performance.now();
@@ -470,7 +422,7 @@ async function runOCR(canvas) {
   document.getElementById("debugText").textContent = lastOCRText;
   document.getElementById("copyDebugBtn").style.display = "block";
   
-  console.log(`[OCR] Recognized text in ${ocrTime}ms (confidence: ${result.data.confidence?.toFixed(1)}%)`);
+  console.log(`[OCR] Recognized text in ${ocrTime}ms`);
   console.log("=== OCR RAW TEXT ===");
   console.log(lastOCRText);
 
@@ -519,29 +471,25 @@ function normalizeText(rawText) {
 }
 
 function extractBirthdateStructured(lines, fullText, results) {
-  const patterns = [
-    /(昭和|平成|令和|[SHTR])[\s]?(\d{1,2})[\s]?年[\s]?(\d{1,2})[\s]?月[\s]?(\d{1,2})[\s]?日?/gi,
-    /(\d{4})[\s]?年[\s]?(\d{1,2})[\s]?月[\s]?(\d{1,2})[\s]?日?/g,
-  ];
+  // 和暦パターン（最優先）
+  const warekiPattern = /(昭和|平成|令和|S|H|R|T|M)[\s]?(\d{1,2})[\s]?年[\s]?(\d{1,2})[\s]?月[\s]?(\d{1,2})[\s]?日?/i;
   
-  const ignorePatterns = [
-    /([有交付取発該]|資格|有効期限|カード裏面)/,
-  ];
+  // キーワード無視リスト
+  const ignorePatterns = [/([有交付取発該者資]|有効期限|カード|裏面)/i];
 
-  // パターン1: 和暦
   for (const line of lines) {
     if (ignorePatterns.some(p => p.test(line))) continue;
     
-    let match;
-    while ((match = patterns[0].exec(line)) !== null) {
-      const eraStr = match[1];
+    const match = line.match(warekiPattern);
+    if (match) {
+      const era = match[1];
       const year = parseInt(match[2]);
       const month = parseInt(match[3]);
       const day = parseInt(match[4]);
 
-      if (isValidDate(year, month, day) && isValidAge(eraStr, year)) {
+      if (isValidDate(year, month, day) && isValidAge(era, year)) {
         results.birthdate = {
-          era: mapEraCode(eraStr),
+          era: mapEraCode(era),
           year, month, day,
           confidence: 95
         };
@@ -550,23 +498,22 @@ function extractBirthdateStructured(lines, fullText, results) {
     }
   }
 
-  // パターン2: 西暦（フォールバック）
+  // 西暦パターン（フォールバック）
+  const seirekiPattern = /(\d{4})[\s]?年[\s]?(\d{1,2})[\s]?月[\s]?(\d{1,2})[\s]?日?/;
   for (const line of lines) {
     if (ignorePatterns.some(p => p.test(line))) continue;
     
-    let match;
-    while ((match = patterns[1].exec(line)) !== null) {
+    const match = line.match(seirekiPattern);
+    if (match) {
       const seirekiYear = parseInt(match[1]);
       const month = parseInt(match[2]);
       const day = parseInt(match[3]);
 
       if (isValidDate(seirekiYear, month, day) && seirekiYear >= 1920 && seirekiYear <= 2030) {
-        const era = convertSeirekiToWarekiCode(seirekiYear);
-        const warekiYear = seirekiYear - warekiBaseYear(era.era);
-        
+        const eraInfo = convertSeirekiToWarekiCode(seirekiYear);
         results.birthdate = {
-          era: era.era,
-          year: warekiYear,
+          era: eraInfo.era,
+          year: eraInfo.year,
           month, day,
           confidence: 85
         };
@@ -577,27 +524,24 @@ function extractBirthdateStructured(lines, fullText, results) {
 }
 
 function extractRatioStructured(lines, fullText, results) {
-  const keywordPatterns = [
-    /負担割合|割合|患者負担/i,
-  ];
-
-  // キーワード周辺から検索
+  // 「割合」周辺から検索
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
-    if (!keywordPatterns.some(p => p.test(line))) continue;
+    if (!/(割合|患者負担|負担)/i.test(line)) continue;
 
-    const contextText = [
+    // この行と前後3行を結合
+    const context = [
+      lines[i - 2] || "",
       lines[i - 1] || "",
       line,
       lines[i + 1] || "",
       lines[i + 2] || ""
     ].join(" ");
 
-    // 1割, 2割, 3割のパターン
-    const match = contextText.match(/([123一二三])[\s]?割/);
+    const match = context.match(/([123])\s*割/);
     if (match) {
       results.ratio = {
-        value: match[1].replace(/一/g, '1').replace(/二/g, '2').replace(/三/g, '3') + "割",
+        value: match[1] + "割",
         confidence: 90
       };
       return;
@@ -605,55 +549,54 @@ function extractRatioStructured(lines, fullText, results) {
   }
 
   // 全文検索（フォールバック）
-  const globalMatch = fullText.match(/([123一二三])[\s]?割/);
-  if (globalMatch) {
+  const match = fullText.match(/([123])\s*割/);
+  if (match) {
     results.ratio = {
-      value: globalMatch[1].replace(/一/g, '1').replace(/二/g, '2').replace(/三/g, '3') + "割",
+      value: match[1] + "割",
       confidence: 70
     };
   }
 }
 
 function extractCategoryStructured(lines, fullText, results) {
-  const categoryKeywords = [
-    /限度区分|適用|区分|限度/i,
+  // パターン定義（70歳未満と70歳以上）
+  const patterns70under = [
+    { regex: /区\s*分\s*[ア]/i, value: "区分ア", conf: 95 },
+    { regex: /区\s*分\s*[イ]/i, value: "区分イ", conf: 95 },
+    { regex: /区\s*分\s*[ウ]/i, value: "区分ウ", conf: 95 },
+    { regex: /区\s*分\s*[エ]/i, value: "区分エ", conf: 95 },
+    { regex: /区\s*分\s*[オ]/i, value: "区分オ", conf: 95 },
   ];
 
-  // 高精度パターン定義
-  const categoryPatterns = [
-    { regex: /[\s]*区[\s]?分[\s]?[ア](?![イウエオ])/i, value: "区分ア", confidence: 95 },
-    { regex: /[\s]*区[\s]?分[\s]?[イ](?![ウエオ])/i, value: "区分イ", confidence: 95 },
-    { regex: /[\s]*区[\s]?分[\s]?[ウ](?![エオ])/i, value: "区分ウ", confidence: 95 },
-    { regex: /[\s]*区[\s]?分[\s]?[エ](?![オ])/i, value: "区分エ", confidence: 95 },
-    { regex: /[\s]*区[\s]?分[\s]?[オ]/i, value: "区分オ", confidence: 95 },
-    
-    { regex: /[\s]*区[\s]?Ⅰ(?!Ⅱ|Ⅲ)/i, value: "区Ⅰ", confidence: 90 },
-    { regex: /[\s]*区[\s]?Ⅱ(?!Ⅲ)/i, value: "区Ⅱ", confidence: 90 },
-    { regex: /[\s]*区[\s]?Ⅲ/i, value: "区Ⅲ", confidence: 90 },
-    
-    { regex: /[\s]*低所得[\s]?Ⅰ/i, value: "低所得Ⅰ", confidence: 90 },
-    { regex: /[\s]*低所得[\s]?Ⅱ/i, value: "低所得Ⅱ", confidence: 90 },
-    
-    { regex: /[\s]*一般(?!的)/i, value: "一般", confidence: 85 },
+  const patterns70over = [
+    { regex: /区\s*Ⅲ/i, value: "区Ⅲ", conf: 90 },
+    { regex: /区\s*Ⅱ/i, value: "区Ⅱ", conf: 90 },
+    { regex: /区\s*Ⅰ/i, value: "区Ⅰ", conf: 90 },
+    { regex: /低所得\s*Ⅱ/i, value: "低所得Ⅱ", conf: 90 },
+    { regex: /低所得\s*Ⅰ/i, value: "低所得Ⅰ", conf: 90 },
+    { regex: /一般(?!的|)/i, value: "一般", conf: 85 },
   ];
 
-  // キーワード周辺から検索
+  const allPatterns = [...patterns70under, ...patterns70over];
+
+  // 「限度区分」周辺から検索
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
-    if (!categoryKeywords.some(p => p.test(line))) continue;
+    if (!/限度|区分|適用/i.test(line)) continue;
 
-    const contextText = [
+    const context = [
+      lines[i - 2] || "",
       lines[i - 1] || "",
       line,
       lines[i + 1] || "",
       lines[i + 2] || ""
     ].join(" ");
 
-    for (const pattern of categoryPatterns) {
-      if (pattern.regex.test(contextText)) {
+    for (const pattern of allPatterns) {
+      if (pattern.regex.test(context)) {
         results.category = {
           value: pattern.value,
-          confidence: pattern.confidence
+          confidence: pattern.conf
         };
         return;
       }
@@ -661,11 +604,11 @@ function extractCategoryStructured(lines, fullText, results) {
   }
 
   // 全文検索（フォールバック）
-  for (const pattern of categoryPatterns) {
+  for (const pattern of allPatterns) {
     if (pattern.regex.test(fullText)) {
       results.category = {
         value: pattern.value,
-        confidence: pattern.confidence - 20
+        confidence: pattern.conf - 15
       };
       return;
     }
@@ -675,7 +618,6 @@ function extractCategoryStructured(lines, fullText, results) {
 function applyParsedResults(results) {
   const progress = document.getElementById("ocrProgress");
   let successCount = 0;
-  let statusMessage = "";
 
   // 生年月日
   if (results.birthdate.confidence > 0) {
@@ -749,10 +691,11 @@ function displayDebugInfo(results) {
 }
 
 function mapEraCode(eraStr) {
-  if (/平成|平|H/.test(eraStr)) return "H";
-  if (/令和|令|R/.test(eraStr)) return "R";
-  if (/大正|T/.test(eraStr)) return "T";
-  if (/明治|M/.test(eraStr)) return "M";
+  if (/平成|平|H/i.test(eraStr)) return "H";
+  if (/令和|令|R/i.test(eraStr)) return "R";
+  if (/大正|T/i.test(eraStr)) return "T";
+  if (/明治|M/i.test(eraStr)) return "M";
+  if (/昭和|S/i.test(eraStr)) return "S";
   return "S";
 }
 
@@ -767,11 +710,11 @@ function isValidAge(eraStr, year) {
   const today = new Date();
   let seirekiYear;
   
-  if (/昭和|S/.test(eraStr)) seirekiYear = 1925 + year;
-  else if (/平成|H/.test(eraStr)) seirekiYear = 1988 + year;
-  else if (/令和|R/.test(eraStr)) seirekiYear = 2018 + year;
-  else if (/大正|T/.test(eraStr)) seirekiYear = 1911 + year;
-  else if (/明治|M/.test(eraStr)) seirekiYear = 1867 + year;
+  if (/昭和|S/i.test(eraStr)) seirekiYear = 1925 + year;
+  else if (/平成|H/i.test(eraStr)) seirekiYear = 1988 + year;
+  else if (/令和|R/i.test(eraStr)) seirekiYear = 2018 + year;
+  else if (/大正|T/i.test(eraStr)) seirekiYear = 1911 + year;
+  else if (/明治|M/i.test(eraStr)) seirekiYear = 1867 + year;
   else return false;
 
   const age = today.getFullYear() - seirekiYear;
@@ -784,11 +727,6 @@ function convertSeirekiToWarekiCode(seirekiYear) {
   if (seirekiYear >= 1926) return { era: "S", year: seirekiYear - 1925 };
   if (seirekiYear >= 1912) return { era: "T", year: seirekiYear - 1911 };
   return { era: "M", year: seirekiYear - 1867 };
-}
-
-function warekiBaseYear(era) {
-  const map = { "S": 1925, "H": 1988, "R": 2018, "T": 1911, "M": 1867 };
-  return map[era] || 1925;
 }
 
 function updateCategoryFromOCRInputs() {
