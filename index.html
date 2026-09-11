@@ -1,939 +1,284 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>医療費・高額療養費かんたんシミュレーター（2026年8月改定対応版）</title>
-<script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
-
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>医療費・高額療養費かんたんシミュレーター（AIOCR）</title>
 <style>
-* { box-sizing: border-box; }
-body { margin: 0; padding: 16px; background: #f3f6f8; color: #222; font-family: -apple-system, BlinkMacSystemFont, "Noto Sans JP", sans-serif; line-height: 1.6; }
-.container { max-width: 600px; margin: auto; }
-.card { background: #fff; border-radius: 16px; padding: 22px; margin-bottom: 16px; box-shadow: 0 3px 12px rgba(0,0,0,.08); }
-h1 { font-size: 1.35rem; text-align: center; margin: 0 0 8px; color: #075ca8; }
-.subtitle { text-align: center; color: #555; font-size: .9rem; margin-bottom: 20px; }
-.badge { display: inline-block; background: #e3f2fd; color: #0d47a1; font-size: .8rem; font-weight: bold; padding: 3px 10px; border-radius: 12px; margin-bottom: 8px; }
-.step { font-size: 1.05rem; font-weight: bold; margin: 20px 0 8px; }
-.help { font-size: .85rem; color: #666; margin-top: 5px; }
-label { display: block; font-weight: bold; margin-top: 14px; }
-select, input[type="number"], input[type="text"], input[type="month"] { width: 100%; padding: 14px; margin-top: 6px; border: 1px solid #bbb; border-radius: 10px; font-size: 1rem; background: #fff; }
-.wareki-group { display: flex; gap: 6px; margin-top: 6px; }
-.wareki-group select { padding: 12px 6px; margin-top: 0; }
-.inline-group { display: flex; gap: 10px; }
-.inline-group > div { flex: 1; }
-button { width: 100%; border: 0; border-radius: 12px; padding: 15px; font-size: 1rem; font-weight: bold; cursor: pointer; margin-top: 10px; }
-.primary { background: #075ca8; color: white; }
-.secondary { background: #e8f0f7; color: #075ca8; }
-.clear-btn { background: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
-.privacy { background: #edf8f0; border-left: 5px solid #2e8b57; padding: 14px; border-radius: 8px; font-size: .9rem; }
-.ocr-area { border: 2px dashed #aaa; border-radius: 12px; padding: 18px; text-align: center; margin-top: 10px; }
-#preview { max-width: 100%; max-height: 360px; margin-top: 15px; border-radius: 10px; display: none; }
-.progress { margin-top: 12px; font-size: .9rem; font-weight: bold; }
-.result { display: none; background: #eef7ff; border-left: 6px solid #075ca8; padding: 18px; border-radius: 10px; margin-top: 20px; }
-.result-price { text-align: center; font-size: 2rem; font-weight: bold; color: #c62828; margin: 8px 0; }
-.big-message { font-size: 1.05rem; font-weight: bold; text-align: center; }
-.formula-box { background: #ffffff; border: 1px solid #bcd8f3; border-radius: 8px; padding: 12px; margin: 12px 0; font-size: .9rem; }
-.formula-code { font-family: monospace; background: #f4f4f4; padding: 4px 8px; border-radius: 4px; display: block; margin: 6px 0; word-break: break-all; }
-.yearly-info { background: #fff8e1; border: 1px solid #ffe082; border-radius: 8px; padding: 12px; margin-top: 10px; font-size: .88rem; color: #5d4037; }
-.warning { background: #fff6df; border-left: 5px solid #e3a400; padding: 14px; border-radius: 8px; margin-top: 15px; }
-#debugText { white-space: pre-wrap; word-break: break-word; font-size: .75rem; background: #222; color: #eee; padding: 10px; border-radius: 8px; max-height: 220px; overflow: auto; display: none; }
-.confidence-badge { display: inline-block; font-size: .75rem; font-weight: bold; padding: 2px 8px; border-radius: 10px; margin-left: 4px; }
-.confidence-high { background: #c8e6c9; color: #1b5e20; }
-.confidence-medium { background: #fff9c4; color: #f57f17; }
-.confidence-low { background: #ffccbc; color: #bf360c; }
-.hidden { display: none !important; }
-hr { border: 0; border-top: 1px solid #ddd; margin: 20px 0; }
-.tips { background: #e3f2fd; border-left: 4px solid #1976d2; padding: 10px; border-radius: 4px; font-size: .85rem; margin-top: 8px; color: #0d47a1; }
+*{box-sizing:border-box}body{margin:0;padding:16px;background:#f3f6f8;color:#222;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans JP",sans-serif}
+.container{max-width:600px;margin:auto}.card{background:#fff;border-radius:16px;padding:22px;margin:0 0 16px;box-shadow:0 2px 10px rgba(0,0,0,.07)}
+h1{text-align:center;font-size:1.35rem;margin:0 0 8px}.subtitle{text-align:center;color:#555;font-size:.92rem}.badge{display:inline-block;background:#e8f1ff;color:#1757a6;padding:6px 10px;border-radius:999px;font-size:.8rem;margin-bottom:10px}
+.step{font-size:1.1rem;font-weight:700;margin-bottom:10px}.help,.tips{font-size:.9rem;line-height:1.65}.tips{background:#fff8df;padding:10px;border-radius:10px;margin:10px 0}
+button,select,input{font:inherit}button{width:100%;border:0;border-radius:10px;padding:13px 12px;margin-top:8px;cursor:pointer;font-weight:700}
+.primary{background:#1976d2;color:#fff}.secondary{background:#eef2f5;color:#222}.danger{background:#fff0f0;color:#b71c1c;border:1px solid #ffcdd2}
+.hidden{display:none}.preview{display:none;max-width:100%;margin-top:12px;border-radius:10px;border:1px solid #ddd}
+label{display:block;font-weight:700;margin:12px 0 6px}input[type=text],input[type=number],select{width:100%;padding:11px;border:1px solid #bbb;border-radius:9px;background:#fff}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}.grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px}
+.privacy{background:#eef8ee;border-left:4px solid #388e3c;padding:10px;margin-top:12px;border-radius:8px;font-size:.86rem;line-height:1.6}
+.ocrbox{border:1px solid #d8dee3;border-radius:12px;padding:12px;margin-top:12px}.ocrrow{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:9px 0}.ocrrow strong{min-width:100px}.confidence{font-size:.78rem;padding:3px 7px;border-radius:999px;background:#eee}.ok{background:#e8f5e9;color:#2e7d32}.warn{background:#fff3cd;color:#856404}.ng{background:#ffebee;color:#c62828}
+.result{display:none;background:#f7fbff;border:2px solid #1976d2}.result-price{text-align:center;font-size:2rem;font-weight:800;margin:12px 0;color:#1757a6}
+.notice{font-size:.82rem;color:#555;line-height:1.6}.debug{display:none;background:#f4f4f4;padding:10px;border-radius:8px;white-space:pre-wrap;word-break:break-word;font-size:.78rem;max-height:260px;overflow:auto}
+.small{font-size:.8rem;color:#666}.mode{display:flex;gap:8px;flex-wrap:wrap}.mode label{font-weight:400;margin:0;display:flex;align-items:center;gap:4px}
 </style>
 </head>
-
 <body>
 <div class="container">
-  <div class="card" style="text-align: center;">
-    <span class="badge">令和8年8月改定・最新版ルール適用</span>
-    <h1>医療費・高額療養費<br>かんたんシミュレーター</h1>
-    <div class="subtitle">保険資格情報を撮影して、自己負担額の目安を確認できます</div>
-    <div class="privacy" style="text-align: left;">
-      <strong>🔒 個人情報について</strong><br>
-      撮影・入力された情報は外部サーバーへ送信されません。すべての計算とOCR処理はブラウザ内で完了します。
-    </div>
-  </div>
+<div class="card">
+<span class="badge">AIOCR対応版</span>
+<h1>医療費・高額療養費<br>かんたんシミュレーター</h1>
+<div class="subtitle">保険資格情報を撮影して、自己負担額の目安を確認できます</div>
+<div class="privacy"><strong>🔒 個人情報について</strong><br>
+この画面自体は撮影画像を保存しません。<br>
+「自前OCR」を選択した場合は、OCRサーバーへ送信した画像をサーバーに保存しない設計にできます。<br>
+「Google Cloud」を選択した場合は画像がGoogle Cloudへ送信されるため、利用前に契約・プライバシー条件を確認してください。</div>
+</div>
 
-  <!-- STEP 1 -->
-  <div class="card">
-    <div class="step">① 保険資格情報を撮影（任意）</div>
-    <div class="help">保険証・資格確認書などの写真を撮影すると生年月日・負担割合・適用区分が自動読み取りされます。</div>
-    <div class="tips">💡 撮影のコツ：保険証をまっすぐ、照明を当てて、ピントを合わせてください</div>
-    <div class="ocr-area">
-      <input id="cameraInput" type="file" accept="image/*" capture="environment" class="hidden">
-      <input id="fileInput" type="file" accept="image/*" class="hidden">
-      <button class="primary" onclick="document.getElementById('cameraInput').click()">📷 保険資格情報を撮影する</button>
-      <button class="secondary" onclick="document.getElementById('fileInput').click()">🖼️ 画像ファイルを選ぶ</button>
-      <button id="reparseBtn" class="secondary" style="display:none; background:#fff3cd; color:#856404; border:1px solid #ffeeba;" onclick="reparseOCR()">🔄 自動入力し直す</button>
-      <button id="clearBtn" class="clear-btn" style="display:none;" onclick="clearInsuranceInfo()">🗑️ クリア</button>
-      <img id="preview" alt="撮影画像">
-      <div id="ocrProgress" class="progress"></div>
-    </div>
-  </div>
+<div class="card">
+<div class="step">① 保険資格情報を撮影（任意）</div>
+<div class="help">資格確認書などの写真から、生年月日・負担割合・限度区分を読み取ります。</div>
+<div class="tips">💡 個人情報を含む実物画像でテストする場合は、利用するOCR方式の送信先を確認してください。</div>
 
-  <!-- STEP 2 -->
-  <div class="card">
-    <div class="step">② 医療費・患者情報について入力</div>
+<label>OCR方式</label>
+<div class="mode">
+<label><input type="radio" name="ocrMode" value="google" checked> Google Cloud Vision</label>
+<label><input type="radio" name="ocrMode" value="selfhost"> 自前OCRサーバー</label>
+</div>
+<label for="backendUrl">OCRサーバーURL</label>
+<input id="backendUrl" type="text" value="http://localhost:8787" placeholder="例: https://your-server.example.com">
+<div class="small">Google Cloudもブラウザから直接呼ばず、Node.jsバックエンド経由で呼びます。</div>
 
-    <div class="inline-group">
-      <div>
-        <label for="ocrRatio">負担割合（OCR読み取り）</label>
-        <input id="ocrRatio" type="text" placeholder="例: 1割" oninput="updateCategoryFromOCRInputs()">
-        <span id="ratioConfidence" class="confidence-badge" style="display:none;"></span>
-      </div>
-      <div>
-        <label for="ocrCategory">限度区分表記（OCR読み取り）</label>
-        <input id="ocrCategory" type="text" placeholder="例: 区Ⅱ, 区分ウ" oninput="updateCategoryFromOCRInputs()">
-        <span id="categoryConfidence" class="confidence-badge" style="display:none;"></span>
-      </div>
-    </div>
+<input id="cameraInput" type="file" accept="image/*" capture="environment" class="hidden">
+<input id="fileInput" type="file" accept="image/*" class="hidden">
+<button class="primary" onclick="document.getElementById('cameraInput').click()">📷 保険資格情報を撮影する</button>
+<button class="secondary" onclick="document.getElementById('fileInput').click()">🖼️ 画像ファイルを選ぶ</button>
+<button id="clearBtn" class="danger" style="display:none" onclick="clearInsuranceInfo()">🗑️ クリア</button>
+<img id="preview" class="preview" alt="撮影画像">
+<div id="ocrProgress" class="small"></div>
 
-    <label>生年月日（和暦）</label>
-    <div class="wareki-group">
-      <select id="birthEra" onchange="onBirthdateChange()" style="flex: 2.2;">
-        <option value="">選択してください</option>
-        <option value="S">昭和</option>
-        <option value="H">平成</option>
-        <option value="R">令和</option>
-        <option value="T">大正</option>
-        <option value="M">明治</option>
-      </select>
-      <select id="birthYear" onchange="onBirthdateChange()" style="flex: 2;"></select>
-      <select id="birthMonth" onchange="onBirthdateChange()" style="flex: 1.8;"></select>
-      <select id="birthDay" onchange="onBirthdateChange()" style="flex: 1.8;"></select>
-    </div>
-    <span id="birthdateConfidence" class="confidence-badge" style="display:none; margin-top:4px; display: inline-block;"></span>
+<div class="ocrbox">
+<div class="ocrrow"><strong>生年月日</strong><span id="birthdateConfidence" class="confidence">未検出</span></div>
+<div class="grid3">
+<select id="birthEra"><option value="">元号</option></select>
+<select id="birthYear"><option value="">年</option></select>
+<select id="birthMonth"><option value="">月</option></select>
+</div>
+<select id="birthDay" style="margin-top:8px"><option value="">日</option></select>
 
-    <label for="calculatedAge">年齢（自動計算）</label>
-    <input id="calculatedAge" type="text" readonly placeholder="生年月日を選択すると自動計算されます" style="background:#f0f0f0;">
+<div class="ocrrow"><strong>負担割合</strong><span id="ratioConfidence" class="confidence">未検出</span></div>
+<input id="ocrRatio" type="text" placeholder="例：1割・2割・3割">
 
-    <label for="ageCategory">年齢区分</label>
-    <select id="ageCategory" onchange="updateAgeUI()">
-      <option value="">選択してください</option>
-      <option value="under70">70歳未満</option>
-      <option value="70to74">70～74歳</option>
-      <option value="over75">75歳以上</option>
-    </select>
+<div class="ocrrow"><strong>限度区分</strong><span id="categoryConfidence" class="confidence">未検出</span></div>
+<input id="ocrCategory" type="text" placeholder="OCR読み取り結果">
+</div>
+</div>
 
-    <label for="category">所得区分・限度区分（自動選択）</label>
-    <select id="category">
-      <option value="">年齢区分を先に選択してください</option>
-    </select>
+<div class="card">
+<div class="step">② 医療費・患者情報について入力</div>
+<label>年齢</label><input id="calculatedAge" type="text" readonly placeholder="生年月日から自動計算">
+<input id="ageCategory" type="hidden">
+<label>所得区分・限度区分</label>
+<select id="category"><option value="">選択してください</option></select>
+<label>診療月</label><input id="treatmentMonth" type="month">
+<label>診療区分</label>
+<select id="treatmentType"><option value="outpatient">外来</option><option value="inpatient">入院・世帯合算</option></select>
+<label>多数回該当</label>
+<select id="multiple"><option value="no">通常</option><option value="3">多数回該当</option></select>
+<label>想定の医療費総額（10割）</label><input id="medicalCost" type="number" min="1" step="1" placeholder="例：1000000">
+<button class="primary" onclick="calculate()">💰 自己負担額を計算する</button>
+</div>
 
-    <hr>
+<div id="result" class="card result">
+<div class="step">③ 計算結果</div>
+<div id="resultPrice" class="result-price"></div>
+<div id="resultMessage"></div>
+<p id="baseFormulaText"></p>
+<div id="calculationDetail"></div>
+<div id="yearlyInfo" class="privacy"></div>
+<p class="notice">※この結果は目安です。実際の自己負担額は医療機関・世帯状況・保険者の判定等により異なる場合があります。</p>
+</div>
 
-    <label for="treatmentMonth">診療年月</label>
-    <input id="treatmentMonth" type="month" value="2026-08">
-
-    <label for="medicalCost">想定の医療費総額（10割）</label>
-    <input id="medicalCost" type="number" min="0" step="1000" value="" placeholder="例：1000000（金額を入力してください）">
-
-    <label for="treatmentType" id="treatmentTypeLabel">診療タイプ（70歳以上のみ選択）</label>
-    <select id="treatmentType">
-      <option value="outpatient" selected>外来のみ（個人単位上限）</option>
-      <option value="combined">入院＋外来（世帯上限）</option>
-    </select>
-
-    <label for="multiple">過去12か月以内に高額療養費に該当した月</label>
-    <select id="multiple">
-      <option value="0">0～2回</option>
-      <option value="3">3回以上（4回目以降 / 多数回該当）</option>
-    </select>
-
-    <button class="primary" onclick="calculate()">💰 自己負担額を計算する</button>
-  </div>
-
-  <!-- RESULT -->
-  <div class="card result" id="result">
-    <div style="text-align:center; font-size:1rem;">この月（単月）の自己負担額の目安</div>
-    <div class="result-price" id="resultPrice">-</div>
-    <div class="big-message" id="resultMessage"></div>
-    <hr>
-    <div class="formula-box">
-      <div style="font-weight:bold; color:#075ca8;">📐 条件に基づく月額計算式（2026年8月基準）</div>
-      <div class="formula-code" id="baseFormulaText">-</div>
-    </div>
-    <div id="calculationDetail"></div>
-    <div class="yearly-info" id="yearlyInfo"></div>
-    <div class="warning">
-      <strong>⚠️ ご注意ください</strong><br>
-      この結果は概算です。食事代・差額ベッド代・文書料などは別途かかります。
-    </div>
-  </div>
-
-  <!-- DEBUG -->
-  <div class="card">
-    <button class="secondary" onclick="toggleDebug()">OCRの解析テキスト原文を見る</button>
-    <button id="copyDebugBtn" class="secondary" style="display:none; margin-top:8px; background:#e2e3e5; color:#383d41;" onclick="copyDebugText()">📋 原文テキストをコピーする</button>
-    <div id="debugInfo" style="display:none; margin-top:12px; font-size:.85rem; background:#f5f5f5; padding:10px; border-radius:8px;"></div>
-    <pre id="debugText"></pre>
-  </div>
+<div class="card">
+<button class="secondary" onclick="toggleDebug()">OCR解析テキストを見る</button>
+<pre id="debugText" class="debug"></pre>
+</div>
 </div>
 
 <script>
-let masterRules = null;
-let lastOCRText = "";
-let ocrWorker = null;
-let isProcessingOCR = false;
+let masterRules=null;
+let lastOCRText="";
+let processing=false;
 
-async function loadMasterRules() {
-  try {
-    const res = await fetch('rules.json');
-    masterRules = await res.json();
+const $=id=>document.getElementById(id);
+
+async function loadMasterRules(){
+  try{
+    const r=await fetch('./rules.json');
+    if(!r.ok) throw new Error('rules.json '+r.status);
+    masterRules=await r.json();
     updateAgeUI();
-  } catch (e) {
-    alert("制度マスタ(rules.json)の読み込みに失敗しました。");
+  }catch(e){
+    console.warn(e);
+    $('ocrProgress').textContent='制度マスタ(rules.json)を読み込めませんでした。計算機能は手動設定が必要です。';
   }
 }
 
-function initOCRWorker() {
-  return new Promise((resolve, reject) => {
-    if (ocrWorker) {
-      resolve(ocrWorker);
-      return;
-    }
-    
-    const startTime = performance.now();
-    Tesseract.createWorker("jpn").then(worker => {
-      const initTime = (performance.now() - startTime).toFixed(0);
-      console.log(`[OCR] Worker initialized in ${initTime}ms`);
-      ocrWorker = worker;
-      resolve(worker);
-    }).catch(reject);
-  });
+function initWarekiSelects(){
+  const era=$('birthEra'), y=$('birthYear'), m=$('birthMonth'), d=$('birthDay');
+  era.innerHTML='<option value="">元号</option>';
+  [['S','昭和'],['H','平成'],['R','令和'],['T','大正'],['M','明治']].forEach(([v,t])=>era.add(new Option(t,v)));
+  y.innerHTML='<option value="">年</option>'; m.innerHTML='<option value="">月</option>'; d.innerHTML='<option value="">日</option>';
+  for(let i=1;i<=64;i++) y.add(new Option(i===1?'元':i,i));
+  for(let i=1;i<=12;i++) m.add(new Option(i,i));
+  for(let i=1;i<=31;i++) d.add(new Option(i,i));
+  ['birthEra','birthYear','birthMonth','birthDay'].forEach(id=>$(id).addEventListener('change',onBirthdateChange));
 }
-
-function initWarekiSelects() {
-  const yearSelect = document.getElementById("birthYear");
-  const monthSelect = document.getElementById("birthMonth");
-  const daySelect = document.getElementById("birthDay");
-  
-  yearSelect.innerHTML = '<option value="">年</option>';
-  monthSelect.innerHTML = '<option value="">月</option>';
-  daySelect.innerHTML = '<option value="">日</option>';
-
-  for (let y = 1; y <= 64; y++) {
-    const opt = document.createElement("option");
-    opt.value = y; opt.textContent = (y === 1 ? "元" : y) + "年";
-    yearSelect.appendChild(opt);
-  }
-  for (let m = 1; m <= 12; m++) {
-    const opt = document.createElement("option");
-    opt.value = m; opt.textContent = m + "月";
-    monthSelect.appendChild(opt);
-  }
-  for (let d = 1; d <= 31; d++) {
-    const opt = document.createElement("option");
-    opt.value = d; opt.textContent = d + "日";
-    daySelect.appendChild(opt);
-  }
-  document.getElementById("birthEra").value = "";
-  document.getElementById("calculatedAge").value = "";
+function eraYearToGregorian(era,year){
+  const y=Number(year); if(!y)return null;
+  return {S:1925+y,H:1988+y,R:2018+y,T:1911+y,M:1867+y}[era]||null;
 }
-
-function convertWarekiToSeireki(era, year) {
-  const y = Number(year);
-  switch (era) {
-    case "S": return 1925 + y; case "H": return 1988 + y;
-    case "R": return 2018 + y; case "T": return 1911 + y;
-    case "M": return 1867 + y; default: return null;
-  }
+function validDate(y,m,d){
+  const x=new Date(y,m-1,d); return x.getFullYear()===y&&x.getMonth()===m-1&&x.getDate()===d;
 }
-
-function onBirthdateChange() {
-  const era = document.getElementById("birthEra").value;
-  const year = document.getElementById("birthYear").value;
-  const month = document.getElementById("birthMonth").value;
-  const day = document.getElementById("birthDay").value;
-
-  if (!era || !year || !month || !day) {
-    document.getElementById("calculatedAge").value = "";
-    return;
-  }
-
-  const seirekiYear = convertWarekiToSeireki(era, year);
-  if (!seirekiYear) return;
-
-  const birthDate = new Date(seirekiYear, month - 1, day);
-  const today = new Date();
-  let age = today.getFullYear() - birthDate.getFullYear();
-  const m = today.getMonth() - birthDate.getMonth();
-  if (m < 0 || (m === 0 && today.getDate() < birthDate.getDate())) age--;
-
-  if (age >= 0 && age <= 120) {
-    document.getElementById("calculatedAge").value = `${age} 歳`;
-    document.getElementById("ageCategory").value = age < 70 ? "under70" : (age < 75 ? "70to74" : "over75");
-    updateAgeUI();
-  }
-}
-
-function updateAgeUI() {
-  const ageCategory = document.getElementById("ageCategory").value;
-  const categorySelect = document.getElementById("category");
-  const type = document.getElementById("treatmentType");
-  const typeLabel = document.getElementById("treatmentTypeLabel");
-
-  categorySelect.innerHTML = "";
-
-  if (!ageCategory || !masterRules) {
-    const defaultOpt = document.createElement("option");
-    defaultOpt.value = "";
-    defaultOpt.textContent = "年齢区分を先に選択してください";
-    categorySelect.appendChild(defaultOpt);
-    type.disabled = true;
-    typeLabel.style.opacity = "0.5";
-    return;
-  }
-
-  const groupKey = (ageCategory === "under70") ? "under70" : "over70";
-  const rulesObj = masterRules.revisions[0][groupKey];
-
-  const defaultOpt = document.createElement("option");
-  defaultOpt.value = "";
-  defaultOpt.textContent = "選択してください";
-  categorySelect.appendChild(defaultOpt);
-
-  Object.keys(rulesObj).forEach(key => {
-    const opt = document.createElement("option");
-    opt.value = key;
-    opt.textContent = rulesObj[key].name;
-    categorySelect.appendChild(opt);
-  });
-
-  if (ageCategory === "under70") {
-    type.disabled = true;
-    typeLabel.style.opacity = "0.5";
-  } else {
-    type.disabled = false;
-    typeLabel.style.opacity = "1.0";
-  }
-
-  updateCategoryFromOCRInputs();
-}
-
-async function handleImageFile(file) {
-  if (!file || isProcessingOCR) return;
-  
-  isProcessingOCR = true;
-  const imageURL = URL.createObjectURL(file);
-  const preview = document.getElementById("preview");
-  preview.src = imageURL;
-  preview.style.display = "block";
-
-  document.getElementById("ocrProgress").innerHTML = "<span style='color:#555;'>🔄 初期化中…</span>";
-  
-  try {
-    await initOCRWorker();
-    document.getElementById("ocrProgress").innerHTML = "<span style='color:#555;'>🖼️ 画像最適化中…</span>";
-    
-    const canvas = await preprocessImageAdvanced(file);
-    
-    document.getElementById("ocrProgress").innerHTML = "<span style='color:#555;'>🔍 解析中…</span>";
-    await runOCR(canvas);
-  } catch (e) {
-    console.error("OCR error:", e);
-    document.getElementById("ocrProgress").innerHTML = "<span style='color:#c62828;'>❌ 読み取りに失敗しました。別の角度で再度お試しください。</span>";
-  } finally {
-    isProcessingOCR = false;
-    URL.revokeObjectURL(imageURL);
-  }
-}
-
-// 保険証に特化した画像前処理
-async function preprocessImageAdvanced(file) {
-  return new Promise((resolve, reject) => {
-    const img = new Image();
-    const url = URL.createObjectURL(file);
-    img.onload = () => {
-      try {
-        const canvas = document.createElement("canvas");
-        
-        // 解像度判定：低い場合のみアップスケール
-        const minDimension = Math.min(img.naturalWidth, img.naturalHeight);
-        const scale = minDimension < 800 ? 2 : 1;
-        
-        canvas.width = img.naturalWidth * scale;
-        canvas.height = img.naturalHeight * scale;
-        const ctx = canvas.getContext("2d");
-        
-        // 高品質スケーリング
-        ctx.imageSmoothingEnabled = true;
-        ctx.imageSmoothingQuality = "high";
-        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-        
-        // 保険証の緑色背景を除去し、テキスト部分を強調
-        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-        enhanceInsuranceCardImage(imageData.data);
-        ctx.putImageData(imageData, 0, 0);
-        
-        URL.revokeObjectURL(url);
-        resolve(canvas);
-      } catch (e) {
-        reject(e);
-      }
-    };
-    img.onerror = () => {
-      URL.revokeObjectURL(url);
-      reject(new Error("Image load failed"));
-    };
-    img.src = url;
-  });
-}
-
-// 保険証画像の強化処理
-function enhanceInsuranceCardImage(data) {
-  // 緑色（RGB: 低R, 高G, 低B）を検出して白くする
-  for (let i = 0; i < data.length; i += 4) {
-    const r = data[i], g = data[i + 1], b = data[i + 2];
-    const gray = Math.round(0.299 * r + 0.587 * g + 0.114 * b);
-    
-    // 緑背景判定：G > R+50 && G > B+50
-    const isGreenBG = (g > r + 50 && g > b + 50);
-    
-    if (isGreenBG) {
-      // 緑背景を白に
-      data[i] = 240;
-      data[i + 1] = 240;
-      data[i + 2] = 240;
-    } else if (gray > 200) {
-      // 明るい部分（背景）を白に
-      data[i] = 255;
-      data[i + 1] = 255;
-      data[i + 2] = 255;
-    } else if (gray < 100) {
-      // 暗い部分（テキスト）をより黒く
-      const enhanced = Math.max(0, gray - 30);
-      data[i] = enhanced;
-      data[i + 1] = enhanced;
-      data[i + 2] = enhanced;
-    } else {
-      // 中間値も調整（コントラスト向上）
-      const enhanced = gray > 150 ? 220 : Math.max(50, gray - 20);
-      data[i] = enhanced;
-      data[i + 1] = enhanced;
-      data[i + 2] = enhanced;
-    }
-  }
-}
-
-async function runOCR(canvas) {
-  const progress = document.getElementById("ocrProgress");
-  
-  if (!ocrWorker) {
-    await initOCRWorker();
-  }
-
-  // 複数のセグメンテーションモードを試す
-  const modes = [
-    Tesseract.PSM.AUTO,
-    Tesseract.PSM.SINGLE_BLOCK,
-    Tesseract.PSM.SPARSE_TEXT
-  ];
-
-  let bestResult = null;
-  let bestConfidence = 0;
-
-  for (const mode of modes) {
-    try {
-      await ocrWorker.setParameters({
-        tessedit_pageseg_mode: mode
-      });
-
-      const result = await ocrWorker.recognize(canvas);
-      const confidence = result.data.confidence || 0;
-      
-      console.log(`[OCR] Mode ${mode}: confidence ${confidence}%`);
-
-      if (confidence > bestConfidence) {
-        bestConfidence = confidence;
-        bestResult = result;
-      }
-    } catch (e) {
-      console.error(`Mode ${mode} failed:`, e);
-    }
-  }
-
-  if (!bestResult) {
-    throw new Error("All OCR modes failed");
-  }
-
-  lastOCRText = bestResult.data.text || "";
-  
-  document.getElementById("debugText").textContent = lastOCRText;
-  document.getElementById("copyDebugBtn").style.display = "block";
-  
-  console.log("=== OCR RAW TEXT ===");
-  console.log(lastOCRText);
-
-  parseOCRResultAdvanced(lastOCRText);
-  document.getElementById("reparseBtn").style.display = "block";
-  document.getElementById("clearBtn").style.display = "block";
-}
-
-// 構造化パース（ロバスト版）
-function parseOCRResultAdvanced(rawText) {
-  const normalizedText = normalizeText(rawText);
-  const lines = normalizedText.split(/\r?\n/).map(l => l.trim()).filter(l => l.length > 0);
-
-  const results = {
-    birthdate: { era: null, year: null, month: null, day: null, confidence: 0 },
-    ratio: { value: "", confidence: 0 },
-    category: { value: "", confidence: 0 }
-  };
-
-  extractBirthdateAdvanced(lines, normalizedText, results);
-  extractRatioAdvanced(lines, normalizedText, results);
-  extractCategoryAdvanced(lines, normalizedText, results);
-
-  applyParsedResults(results);
-  displayDebugInfo(results);
-}
-
-function normalizeText(rawText) {
-  return rawText
-    .replace(/[０-９]/g, s => String.fromCharCode(s.charCodeAt(0) - 0xfee0))
-    .replace(/[ａ-ｚＡ-Ｚ]/g, s => String.fromCharCode(s.charCodeAt(0) - 0xfee0))
-    .replace(/信和/g, "令和")
-    .replace(/([^区分])I(?!I)/gi, "$1Ⅰ")
-    .replace(/([^区分])II(?!I)/gi, "$1Ⅱ")
-    .replace(/([^区分])III/gi, "$1Ⅲ")
-    .replace(/区\s*lll/gi, "区Ⅲ")
-    .replace(/区\s*ll/gi, "区Ⅱ")
-    .replace(/区\s*l(?!l)/gi, "区Ⅰ")
-    .replace(/\s+/g, ' ');
-}
-
-function extractBirthdateAdvanced(lines, fullText, results) {
-  // パターン：和暦・西暦の両対応
-  const patterns = [
-    { regex: /(昭和|平成|令和)\s*(\d{1,2})\s*年\s*(\d{1,2})\s*月\s*(\d{1,2})\s*日?/gi, type: 'wareki' },
-    { regex: /([S|H|R|T|M])\s*(\d{1,2})\s*年\s*(\d{1,2})\s*月\s*(\d{1,2})\s*日?/gi, type: 'wareki_abbr' },
-    { regex: /(\d{4})\s*年\s*(\d{1,2})\s*月\s*(\d{1,2})\s*日?/g, type: 'seireki' },
-  ];
-
-  const ignoreKeywords = /([有交付取得発効該当]|有効期限|カード|裏面)/i;
-
-  // 全ラインをスキャン
-  for (const line of lines) {
-    if (ignoreKeywords.test(line)) continue;
-
-    for (const pattern of patterns) {
-      let match;
-      const regex = new RegExp(pattern.regex);
-      
-      while ((match = regex.exec(line)) !== null) {
-        if (pattern.type === 'wareki' || pattern.type === 'wareki_abbr') {
-          const era = match[1];
-          const year = parseInt(match[2]);
-          const month = parseInt(match[3]);
-          const day = parseInt(match[4]);
-
-          if (isValidDate(year, month, day) && isValidAge(era, year)) {
-            results.birthdate = {
-              era: mapEraCode(era),
-              year, month, day,
-              confidence: 95
-            };
-            return;
-          }
-        } else if (pattern.type === 'seireki') {
-          const seirekiYear = parseInt(match[1]);
-          const month = parseInt(match[2]);
-          const day = parseInt(match[3]);
-
-          if (isValidDate(seirekiYear, month, day) && seirekiYear >= 1920 && seirekiYear <= 2030) {
-            const eraInfo = convertSeirekiToWarekiCode(seirekiYear);
-            results.birthdate = {
-              era: eraInfo.era,
-              year: eraInfo.year,
-              month, day,
-              confidence: 85
-            };
-            return;
-          }
-        }
-      }
-    }
-  }
-}
-
-function extractRatioAdvanced(lines, fullText, results) {
-  // キーワード + 複数の数字表現パターン
-  const ratioPatterns = [
-    /([1-3])\s*割/g,              // 1割, 2割, 3割
-    /([一二三])\s*割/g,            // 一割, 二割, 三割
-    /([1-3]割)/g,                  // 1割（スペースなし）
-    /負担割合\s*([1-3])/g,        // 負担割合 1
-  ];
-
-  // 「割」周辺を中心に検索
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i];
-    if (!/割合|患者負担|負担|割/i.test(line)) continue;
-
-    const context = [
-      lines[i - 2] || "",
-      lines[i - 1] || "",
-      line,
-      lines[i + 1] || "",
-      lines[i + 2] || ""
-    ].join(" ");
-
-    for (const pattern of ratioPatterns) {
-      const match = context.match(pattern);
-      if (match) {
-        const num = match[1].replace(/一/g, '1').replace(/二/g, '2').replace(/三/g, '3');
-        if (/[123]/.test(num)) {
-          results.ratio = {
-            value: num + "割",
-            confidence: 90
-          };
-          return;
-        }
-      }
-    }
-  }
-
-  // 全文検索（フォールバック）
-  for (const pattern of ratioPatterns) {
-    const match = fullText.match(pattern);
-    if (match) {
-      const num = match[1].replace(/一/g, '1').replace(/二/g, '2').replace(/三/g, '3');
-      if (/[123]/.test(num)) {
-        results.ratio = {
-          value: num + "割",
-          confidence: 65
-        };
-        return;
-      }
-    }
-  }
-}
-
-function extractCategoryAdvanced(lines, fullText, results) {
-  const categoryPatterns = [
-    { regex: /区\s*分\s*[ア]/i, value: "区分ア", conf: 95 },
-    { regex: /区\s*分\s*[イ]/i, value: "区分イ", conf: 95 },
-    { regex: /区\s*分\s*[ウ]/i, value: "区分ウ", conf: 95 },
-    { regex: /区\s*分\s*[エ]/i, value: "区分エ", conf: 95 },
-    { regex: /区\s*分\s*[オ]/i, value: "区分オ", conf: 95 },
-    { regex: /区\s*Ⅲ/i, value: "区Ⅲ", conf: 90 },
-    { regex: /区\s*Ⅱ/i, value: "区Ⅱ", conf: 90 },
-    { regex: /区\s*Ⅰ/i, value: "区Ⅰ", conf: 90 },
-    { regex: /低所得\s*Ⅱ/i, value: "低所得Ⅱ", conf: 90 },
-    { regex: /低所得\s*Ⅰ/i, value: "低所得Ⅰ", conf: 90 },
-    { regex: /一般(?!的)/i, value: "一般", conf: 85 },
-  ];
-
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i];
-    if (!/限度|区分|適用|区/i.test(line)) continue;
-
-    const context = [
-      lines[i - 2] || "",
-      lines[i - 1] || "",
-      line,
-      lines[i + 1] || "",
-      lines[i + 2] || ""
-    ].join(" ");
-
-    for (const pattern of categoryPatterns) {
-      if (pattern.regex.test(context)) {
-        results.category = {
-          value: pattern.value,
-          confidence: pattern.conf
-        };
-        return;
-      }
-    }
-  }
-
-  // 全文検索
-  for (const pattern of categoryPatterns) {
-    if (pattern.regex.test(fullText)) {
-      results.category = {
-        value: pattern.value,
-        confidence: pattern.conf - 15
-      };
-      return;
-    }
-  }
-}
-
-function applyParsedResults(results) {
-  const progress = document.getElementById("ocrProgress");
-  let successCount = 0;
-
-  if (results.birthdate.confidence > 0) {
-    document.getElementById("birthEra").value = results.birthdate.era;
-    document.getElementById("birthYear").value = results.birthdate.year;
-    document.getElementById("birthMonth").value = results.birthdate.month;
-    document.getElementById("birthDay").value = results.birthdate.day;
-    onBirthdateChange();
-    updateConfidenceBadge("birthdateConfidence", results.birthdate.confidence);
-    successCount++;
-  }
-
-  if (results.ratio.confidence > 0) {
-    document.getElementById("ocrRatio").value = results.ratio.value;
-    updateConfidenceBadge("ratioConfidence", results.ratio.confidence);
-    successCount++;
-  }
-
-  if (results.category.confidence > 0) {
-    document.getElementById("ocrCategory").value = results.category.value;
-    updateConfidenceBadge("categoryConfidence", results.category.confidence);
-    successCount++;
-  }
-
-  updateCategoryFromOCRInputs();
-
-  if (successCount === 3) {
-    progress.innerHTML = "<span style='color:#2e7d32;'>✅ 3つの項目すべてを検出しました！</span>";
-  } else if (successCount === 2) {
-    progress.innerHTML = "<span style='color:#558b2f;'>✅ 2つの項目を検出しました。残りの項目を手動で入力してください。</span>";
-  } else if (successCount === 1) {
-    progress.innerHTML = "<span style='color:#f57f17;'>⚠️ 1つの項目のみ検出。手動で確認・補完してください。</span>";
-  } else {
-    progress.innerHTML = "<span style='color:#c62828;'>❌ 項目を検出できませんでした。手動で入力してください。</span>";
-  }
-}
-
-function updateConfidenceBadge(elementId, confidence) {
-  const badge = document.getElementById(elementId);
-  let text, className;
-  
-  if (confidence >= 90) {
-    text = "確実";
-    className = "confidence-high";
-  } else if (confidence >= 70) {
-    text = "推定";
-    className = "confidence-medium";
-  } else {
-    text = "低確実";
-    className = "confidence-low";
-  }
-  
-  badge.textContent = `${text} (${confidence}%)`;
-  badge.className = `confidence-badge ${className}`;
-  badge.style.display = "inline-block";
-}
-
-function displayDebugInfo(results) {
-  const debugInfo = document.getElementById("debugInfo");
-  debugInfo.innerHTML = `
-    <strong>📊 OCR抽出結果（信頼度スコア付き）</strong><br>
-    生年月日: ${results.birthdate.era || "未検出"} ${results.birthdate.year || ""} 年 ${results.birthdate.month || ""} 月 ${results.birthdate.day || ""} 日 → 信頼度 ${results.birthdate.confidence}%<br>
-    負担割合: ${results.ratio.value || "未検出"} → 信頼度 ${results.ratio.confidence}%<br>
-    限度区分: ${results.category.value || "未検出"} → 信頼度 ${results.category.confidence}%
-  `;
-  debugInfo.style.display = "block";
-}
-
-function mapEraCode(eraStr) {
-  if (/平成|平|H/i.test(eraStr)) return "H";
-  if (/令和|令|R/i.test(eraStr)) return "R";
-  if (/大正|T/i.test(eraStr)) return "T";
-  if (/明治|M/i.test(eraStr)) return "M";
-  if (/昭和|S/i.test(eraStr)) return "S";
-  return "S";
-}
-
-function isValidDate(year, month, day) {
-  if (month < 1 || month > 12 || day < 1 || day > 31) return false;
-  if ([4,6,9,11].includes(month) && day > 30) return false;
-  if (month === 2 && day > 29) return false;
-  return true;
-}
-
-function isValidAge(eraStr, year) {
-  const today = new Date();
-  let seirekiYear;
-  
-  if (/昭和|S/i.test(eraStr)) seirekiYear = 1925 + year;
-  else if (/平成|H/i.test(eraStr)) seirekiYear = 1988 + year;
-  else if (/令和|R/i.test(eraStr)) seirekiYear = 2018 + year;
-  else if (/大正|T/i.test(eraStr)) seirekiYear = 1911 + year;
-  else if (/明治|M/i.test(eraStr)) seirekiYear = 1867 + year;
-  else return false;
-
-  const age = today.getFullYear() - seirekiYear;
-  return age >= 0 && age <= 120;
-}
-
-function convertSeirekiToWarekiCode(seirekiYear) {
-  if (seirekiYear >= 2019) return { era: "R", year: seirekiYear - 2018 };
-  if (seirekiYear >= 1989) return { era: "H", year: seirekiYear - 1988 };
-  if (seirekiYear >= 1926) return { era: "S", year: seirekiYear - 1925 };
-  if (seirekiYear >= 1912) return { era: "T", year: seirekiYear - 1911 };
-  return { era: "M", year: seirekiYear - 1867 };
-}
-
-function updateCategoryFromOCRInputs() {
-  const ageCat = document.getElementById("ageCategory").value;
-  if (!ageCat) return;
-
-  const ratioVal = document.getElementById("ocrRatio").value;
-  const catVal = document.getElementById("ocrCategory").value;
-  const categorySelect = document.getElementById("category");
-  let targetCategory = "";
-
-  if (ageCat === "under70") {
-    if (/区分\s*ア/i.test(catVal)) targetCategory = "top";
-    else if (/区分\s*イ/i.test(catVal)) targetCategory = "high";
-    else if (/区分\s*(ウ|ワ|ク|u|U|つ)/i.test(catVal)) targetCategory = "middle";
-    else if (/区分\s*エ/i.test(catVal)) targetCategory = "low";
-    else if (/区分\s*オ/i.test(catVal)) targetCategory = "nonTax";
-    else if (catVal || ratioVal) targetCategory = "middle";
-  } else {
-    const is3割 = /3割/.test(ratioVal);
-
-    if (is3割) {
-      if (/Ⅲ|3/i.test(catVal)) targetCategory = "top";
-      else if (/Ⅱ|2/i.test(catVal)) targetCategory = "high_ii";
-      else if (/Ⅰ|1/i.test(catVal)) targetCategory = "high_i";
-      else targetCategory = "high_i";
-    } else {
-      if (/低所得\s*Ⅱ|区\s*Ⅱ|Ⅱ|2/i.test(catVal)) targetCategory = "low_ii";
-      else if (/低所得\s*Ⅰ|区\s*Ⅰ|Ⅰ|1/i.test(catVal)) targetCategory = "low_i";
-      else if (/一般/i.test(catVal) || catVal === "") targetCategory = "middle";
-    }
-  }
-
-  if (targetCategory && categorySelect.querySelector(`option[value="${targetCategory}"]`)) {
-    categorySelect.value = targetCategory;
-  }
-}
-
-function reparseOCR() {
-  if (lastOCRText) parseOCRResultAdvanced(lastOCRText);
-}
-
-function clearInsuranceInfo() {
-  document.getElementById("preview").style.display = "none";
-  document.getElementById("debugText").textContent = "";
-  document.getElementById("debugInfo").style.display = "none";
-  document.getElementById("copyDebugBtn").style.display = "none";
-  document.getElementById("reparseBtn").style.display = "none";
-  document.getElementById("clearBtn").style.display = "none";
-  document.getElementById("ocrProgress").innerHTML = "";
-  document.getElementById("ocrRatio").value = "";
-  document.getElementById("ocrCategory").value = "";
-  document.getElementById("ratioConfidence").style.display = "none";
-  document.getElementById("categoryConfidence").style.display = "none";
-  document.getElementById("birthdateConfidence").style.display = "none";
-  initWarekiSelects();
-  document.getElementById("ageCategory").value = "";
+function onBirthdateChange(){
+  const y=eraYearToGregorian($('birthEra').value,$('birthYear').value),m=+$('birthMonth').value,d=+$('birthDay').value;
+  if(!y||!m||!d||!validDate(y,m,d)){ $('calculatedAge').value=''; $('ageCategory').value=''; updateAgeUI(); return; }
+  const b=new Date(y,m-1,d), t=new Date();
+  let age=t.getFullYear()-b.getFullYear();
+  if(t.getMonth()<b.getMonth()||(t.getMonth()===b.getMonth()&&t.getDate()<b.getDate()))age--;
+  $('calculatedAge').value=age+' 歳';
+  $('ageCategory').value=age<70?'under70':age<75?'70to74':'over75';
   updateAgeUI();
-  document.getElementById("result").style.display = "none";
 }
-
-function copyDebugText() {
-  if (!lastOCRText) return;
-  navigator.clipboard.writeText(lastOCRText).then(() => {
-    alert("OCR解析原文をクリップボードにコピーしました！");
-  }).catch(() => {
-    alert("コピーに失敗しました。手動で選択してください。");
-  });
+function updateAgeUI(){
+  const sel=$('category'); sel.innerHTML='<option value="">選択してください</option>';
+  if(!masterRules||!$('ageCategory').value)return;
+  const group=$('ageCategory').value==='under70'?'under70':'over70';
+  const obj=masterRules.revisions?.[0]?.[group]; if(!obj)return;
+  Object.keys(obj).forEach(k=>sel.add(new Option(obj[k].name,k)));
+  updateCategoryFromOCRInputs();
 }
-
-function calculate() {
-  if (!masterRules) return;
-
-  const ageCat = document.getElementById("ageCategory").value;
-  if (!ageCat) {
-    alert("年齢区分を選択してください。");
-    return;
-  }
-
-  const cat = document.getElementById("category").value;
-  if (!cat) {
-    alert("所得区分・限度区分を選択してください。");
-    return;
-  }
-
-  const costInput = document.getElementById("medicalCost").value;
-  if (!costInput || Number(costInput) <= 0) {
-    alert("想定の医療費総額（10割）を入力してください。");
-    return;
-  }
-
-  const month = document.getElementById("treatmentMonth").value;
-  const cost = Number(costInput);
-  const isMultiple = document.getElementById("multiple").value === "3";
-  const isOutpatient = document.getElementById("treatmentType").value === "outpatient";
-
-  const rev = masterRules.revisions.find(r => month >= r.effectiveFrom && month <= r.effectiveTo) || masterRules.revisions[0];
-  const groupKey = (ageCat === "under70") ? "under70" : "over70";
-  const rule = rev[groupKey][cat];
-
-  let cap = 0;
-  let baseFormula = "";
-
-  if (rule.baseCap !== undefined) {
-    cap = rule.baseCap;
-    if (rule.threshold > 0 && cost > rule.threshold) {
-      cap += Math.floor((cost - rule.threshold) * rule.rate);
-      baseFormula = `${rule.baseCap.toLocaleString()}円 + (総医療費 - ${rule.threshold.toLocaleString()}円) × 1%`;
-    } else {
-      baseFormula = `${rule.baseCap.toLocaleString()}円（定額）`;
-    }
-  } else {
-    cap = isOutpatient ? rule.outpatientCap : rule.householdCap;
-    baseFormula = `${cap.toLocaleString()}円（定額）`;
-  }
-
-  if (isMultiple && rule.multipleCap) {
-    cap = Math.min(cap, rule.multipleCap);
-    baseFormula += ` ➔ 多数回該当適用で定額【${rule.multipleCap.toLocaleString()}円】（据え置き）`;
-  }
-
-  const normalBurden = Math.floor(cost * rule.copayRate);
-  const actualCap = Math.min(cap, normalBurden);
-  const saved = Math.max(0, normalBurden - actualCap);
-
-  document.getElementById("result").style.display = "block";
-  document.getElementById("resultPrice").textContent = `約 ${actualCap.toLocaleString()} 円`;
-  document.getElementById("resultMessage").innerHTML = saved > 0
-    ? `通常の自己負担額より<br><strong>${saved.toLocaleString()}円</strong> 軽くなります`
-    : "通常の自己負担額が上限額を下回っています。";
-  document.getElementById("baseFormulaText").textContent = baseFormula;
-
-  document.getElementById("calculationDetail").innerHTML = `
-    <p><strong>総医療費（10割）:</strong> ${cost.toLocaleString()}円</p>
-    <p><strong>窓口負担目安（${Math.round(rule.copayRate * 10)}割）:</strong> ${normalBurden.toLocaleString()}円</p>
-    <p><strong>高額療養費月額上限:</strong> ${cap.toLocaleString()}円</p>
-  `;
-
-  if (rule.yearlyCap) {
-    document.getElementById("yearlyInfo").innerHTML = `
-      <strong>💡 新設：年間上限について（2026年8月〜）</strong><br>
-      該当区分の年間上限額は <strong>${rule.yearlyCap.toLocaleString()}円</strong> です。<br>
-      当年8月〜翌年7月の1年間の自己負担合計がこの額を超えた場合、超えた分が後日還付されます。
-    `;
-  } else {
-    document.getElementById("yearlyInfo").innerHTML = "";
-  }
-
-  document.getElementById("result").scrollIntoView({ behavior: "smooth" });
+function normalizeOCRText(s){
+  return (s||'').normalize('NFKC')
+    .replace(/\r\n?/g,'\n')
+    .replace(/[ \t\u3000]+/g,' ')
+    .replace(/区\s*分/g,'区分')
+    .trim();
 }
-
-function toggleDebug() {
-  const d = document.getElementById("debugText");
-  d.style.display = d.style.display === "block" ? "none" : "block";
+function normalizeRatio(s){
+  const x=normalizeOCRText(s).replace(/\s/g,'');
+  if(/(?:1|一|Ⅰ|I)[割わ]?(?:り)?/.test(x)) return '1割';
+  if(/(?:2|二|Ⅱ|II)[割わ]?(?:り)?/.test(x)) return '2割';
+  if(/(?:3|三|Ⅲ|III)[割わ]?(?:り)?/.test(x)) return '3割';
+  return '';
 }
+function normalizeCategory(s){
+  let x=normalizeOCRText(s).replace(/\s/g,'');
+  x=x.replace(/^区分/,'区分');
+  const m=x.match(/区分([アアイイウエオカキクケコ|AIUEOK])/i);
+  if(!m)return '';
+  const map={A:'ア',I:'イ',U:'ウ',E:'エ',O:'オ',K:'カ',ア:'ア',イ:'イ',ウ:'ウ',エ:'エ',オ:'オ',カ:'カ',キ:'キ',ク:'ク',ケ:'ケ',コ:'コ'};
+  return '区分'+(map[m[1].toUpperCase()]||map[m[1]]||m[1]);
+}
+function extractFromOCR(text){
+  const n=normalizeOCRText(text);
+  const lines=n.split('\n').map(x=>x.trim()).filter(Boolean);
+  const out={ratio:'',category:'',birth:null,ratioConfidence:0,categoryConfidence:0,birthConfidence:0};
 
-document.getElementById("cameraInput").addEventListener("change", e => handleImageFile(e.target.files[0]));
-document.getElementById("fileInput").addEventListener("change", e => handleImageFile(e.target.files[0]));
-
-initWarekiSelects();
-loadMasterRules();
+  for(const line of lines){
+    const r=normalizeRatio(line);
+    if(r && !out.ratio){out.ratio=r;out.ratioConfidence=92;}
+    const c=normalizeCategory(line);
+    if(c && !out.category){out.category=c;out.categoryConfidence=88;}
+  }
+  const all=lines.join(' ');
+  let m=all.match(/(昭和|平成|令和|大正|明治|S|H|R|T|M)\s*([元0-9]{1,2})\s*年\s*([0-9]{1,2})\s*月\s*([0-9]{1,2})\s*日/);
+  if(!m)m=all.match(/(昭和|平成|令和|大正|明治|S|H|R|T|M)\s*([0-9]{1,2})\s*年\s*([0-9]{1,2})\s*月\s*([0-9]{1,2})/);
+  if(m){
+    const era=/^昭和|^S$/i.test(m[1])?'S':/^平成|^H$/i.test(m[1])?'H':/^令和|^R$/i.test(m[1])?'R':/^大正|^T$/i.test(m[1])?'T':'M';
+    const year=m[2]==='元'?1:Number(m[2]);
+    const month=Number(m[3]),day=Number(m[4]||1),gy=eraYearToGregorian(era,year);
+    if(gy&&validDate(gy,month,day)){out.birth={era,year,month,day};out.birthConfidence=90;}
+  }
+  return out;
+}
+function applyOCR(o){
+  if(o.ratio){$('ocrRatio').value=o.ratio;setBadge('ratioConfidence',o.ratioConfidence);}
+  if(o.category){$('ocrCategory').value=o.category;setBadge('categoryConfidence',o.categoryConfidence);updateCategoryFromOCRInputs();}
+  if(o.birth){
+    $('birthEra').value=o.birth.era;$('birthYear').value=o.birth.year;$('birthMonth').value=o.birth.month;$('birthDay').value=o.birth.day;
+    onBirthdateChange();setBadge('birthdateConfidence',o.birthConfidence);
+  }
+}
+function setBadge(id,c){
+  const e=$(id);e.textContent=c>=90?'確実 ('+c+'%)':c>=70?'推定 ('+c+'%)':'要確認 ('+c+'%)';
+  e.className='confidence '+(c>=90?'ok':c>=70?'warn':'ng');
+}
+function updateCategoryFromOCRInputs(){
+  const v=normalizeCategory($('ocrCategory').value);
+  if(!masterRules||!$('ageCategory').value||!v)return;
+  const group=$('ageCategory').value==='under70'?'under70':'over70';
+  const obj=masterRules.revisions?.[0]?.[group]; if(!obj)return;
+  const key=Object.keys(obj).find(k=>normalizeCategory(obj[k].name)===v || normalizeCategory(k)===v);
+  if(key)$('category').value=key;
+}
+async function handleImage(file){
+  if(!file||processing)return;
+  processing=true;$('clearBtn').style.display='block';$('preview').style.display='block';
+  $('preview').src=URL.createObjectURL(file);
+  const mode=document.querySelector('input[name=ocrMode]:checked').value;
+  const base=($('backendUrl').value||'').replace(/\/$/,'');
+  try{
+    $('ocrProgress').textContent='🔄 OCRサーバーへ送信中…';
+    const fd=new FormData();fd.append('image',file);
+    const endpoint=mode==='google'?base+'/api/ocr/google':base+'/api/ocr/selfhost';
+    const r=await fetch(endpoint,{method:'POST',body:fd});
+    const data=await r.json();
+    if(!r.ok)throw new Error(data.error||'OCR API error');
+    lastOCRText=data.text||'';
+    $('debugText').textContent=lastOCRText;
+    const parsed=extractFromOCR(lastOCRText);
+    applyOCR(parsed);
+    const found=[parsed.ratio,parsed.category,parsed.birth].filter(Boolean).length;
+    $('ocrProgress').textContent=found===3?'✅ 3項目を読み取りました。必ず表示内容を確認してください。':`⚠️ ${found}/3項目を読み取りました。未検出項目は手入力してください。`;
+  }catch(e){
+    console.error(e);
+    $('ocrProgress').textContent='❌ OCRエラー: '+e.message;
+  }finally{processing=false;}
+}
+function clearInsuranceInfo(){
+  $('preview').style.display='none';$('preview').src='';$('ocrProgress').textContent='';
+  $('ocrRatio').value='';$('ocrCategory').value='';$('calculatedAge').value='';$('ageCategory').value='';
+  ['ratioConfidence','categoryConfidence','birthdateConfidence'].forEach(id=>{ $(id).textContent='未検出';$(id).className='confidence';});
+  initWarekiSelects();updateAgeUI();$('result').style.display='none';
+}
+function toggleDebug(){ $('debugText').style.display=$('debugText').style.display==='block'?'none':'block';}
+function calculate(){
+  if(!masterRules){alert('rules.jsonが読み込めていません。');return;}
+  const age=$('ageCategory').value,cat=$('category').value,cost=Number($('medicalCost').value);
+  if(!age){alert('生年月日・年齢区分を入力してください。');return;}
+  if(!cat){alert('所得区分・限度区分を選択してください。');return;}
+  if(!(cost>0)){alert('想定の医療費総額を入力してください。');return;}
+  const month=$('treatmentMonth').value||new Date().toISOString().slice(0,7);
+  const rev=masterRules.revisions.find(r=>month>=r.effectiveFrom&&month<=r.effectiveTo)||masterRules.revisions[0];
+  const group=age==='under70'?'under70':'over70',rule=rev?.[group]?.[cat];
+  if(!rule){alert('制度マスタに該当する区分がありません。');return;}
+  const outpatient=$('treatmentType').value==='outpatient',multi=$('multiple').value==='3';
+  let cap,formula;
+  if(rule.baseCap!==undefined){cap=rule.baseCap;if(rule.threshold>0&&cost>rule.threshold){cap+=Math.floor((cost-rule.threshold)*rule.rate);formula=`${rule.baseCap.toLocaleString()}円 + (総医療費 - ${rule.threshold.toLocaleString()}円) × ${rule.rate*100}%`;}else formula=`${rule.baseCap.toLocaleString()}円（定額）`;}
+  else {cap=outpatient?rule.outpatientCap:rule.householdCap;formula=`${cap.toLocaleString()}円（定額）`;}
+  if(multi&&rule.multipleCap){cap=Math.min(cap,rule.multipleCap);formula+=` → 多数回該当 ${rule.multipleCap.toLocaleString()}円`;}
+  const normal=Math.floor(cost*rule.copayRate),actual=Math.min(cap,normal),saved=Math.max(0,normal-actual);
+  $('result').style.display='block';$('resultPrice').textContent='約 '+actual.toLocaleString()+' 円';
+  $('resultMessage').innerHTML=saved?`通常の自己負担額より <strong>${saved.toLocaleString()}円</strong> 軽くなる目安です。`:'通常の自己負担額が上限額を下回る目安です。';
+  $('baseFormulaText').textContent=formula;
+  $('calculationDetail').innerHTML=`<p><strong>総医療費（10割）:</strong> ${cost.toLocaleString()}円</p><p><strong>窓口負担目安:</strong> ${normal.toLocaleString()}円</p><p><strong>高額療養費月額上限:</strong> ${cap.toLocaleString()}円</p>`;
+  $('yearlyInfo').innerHTML=rule.yearlyCap?`<strong>年間上限</strong><br>${rule.yearlyCap.toLocaleString()}円（制度マスタに設定された値）`:'';
+  $('result').scrollIntoView({behavior:'smooth'});
+}
+$('cameraInput').addEventListener('change',e=>handleImage(e.target.files[0]));
+$('fileInput').addEventListener('change',e=>handleImage(e.target.files[0]));
+$('ocrCategory').addEventListener('input',updateCategoryFromOCRInputs);
+initWarekiSelects();loadMasterRules();
 </script>
 </body>
 </html>
